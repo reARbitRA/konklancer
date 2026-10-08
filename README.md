@@ -1,11 +1,19 @@
-<div align="center">
+# Freelance Pro Engine (Sept 2026)
 
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
+این سیستم برای اتوماسیون کامل چرخه فریلنسری طراحی شده است.
 
-  <h1>Built with AI Studio</h2>
+## نحوه راه اندازی (کمترین تلاش):
+1. **پایتون را نصب کنید:** `pip install playwright httpx PyGithub`
+2. **مرورگر کروم را با پورت دیباگ باز کنید:**
+   - در ویندوز: `chrome.exe --remote-debugging-port=9222`
+   - وارد سایت پونیشا یا کارلانسر شوید.
+3. **تنظیمات:** توکن‌های گیتهاب و Arena.ai را در فایل `freelance_pro_engine.py` وارد کنید.
+4. **اجرا:** `python freelance_pro_engine.py`
 
-  <p>The fastest path from prompt to production with Gemini.</p>
+## قابلیت‌ها:
+- **Stealth CDP:** استفاده از مرورگر اصلی شما برای دور زدن ۱۰۰٪ سیستم‌های ضد ربات.
+- **Arena.ai Integration:** ارسال توضیحات پروژه به مغز متفکر برای تولید کد و تست خودکار.
+- **GitHub Auto-Push:** ساخت خودکار مخزن و آپلود کدها.
+- **Multi-Platform:** پشتیبانی از چندین سایت به صورت همزمان.
 
-  <a href="https://aistudio.google.com/apps">Start building</a>
-
-</div>
+**توجه:** این اسکریپت برای استفاده در محیط محلی (Local) طراحی شده است تا به مرورگر شما دسترسی داشته باشد.
