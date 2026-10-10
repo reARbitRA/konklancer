@@ -230,6 +230,25 @@ let feedIndex = 0;
 
 let geminiCooldownUntil = 0;
 
+function handleGeminiError(err: any): number {
+  if (err && (err.message?.includes('429') || err.code === 429)) {
+    let delayMs = 3600000; // Default 1 hour
+    if (err.details && Array.isArray(err.details)) {
+        const retryInfo = err.details.find((d: any) => d['@type']?.includes('RetryInfo'));
+        if (retryInfo && retryInfo.retryDelay) {
+            const seconds = parseInt(retryInfo.retryDelay);
+            if (!isNaN(seconds)) {
+                delayMs = seconds * 1000;
+            }
+        }
+    }
+    console.error(`Gemini rate limited, cooling down for ${delayMs}ms`);
+    geminiCooldownUntil = Date.now() + delayMs;
+    return delayMs;
+  }
+  return 0;
+}
+
 async function categorizeJobWithGeminiServer(title: string, description: string): Promise<'Frontend' | 'Backend' | 'DevOps' | 'Design'> {
   if (!ai || Date.now() < geminiCooldownUntil) {
     const text = `${title} ${description}`.toLowerCase();
@@ -257,10 +276,7 @@ Return only JSON:
     const valid = ['Frontend', 'Backend', 'DevOps', 'Design'];
     return valid.includes(parsed.tag) ? (parsed.tag as any) : 'Backend';
   } catch (err: any) {
-    if (err && (err.message?.includes('429') || err.code === 429)) {
-      console.error('Gemini rate limited, cooling down for 1 hour');
-      geminiCooldownUntil = Date.now() + 3600000;
-    }
+    handleGeminiError(err);
     console.warn('Gemini categorization failed on server:', err);
     return 'Backend';
   }
@@ -471,10 +487,7 @@ app.post('/api/analyze-job', async (req: Request, res: Response) => {
       suggestedKicker: parsed.suggestedKicker || 'اشاره به استراتژی حل سریع مسئله'
     });
   } catch (error: any) {
-    if (error && (error.message?.includes('429') || error.code === 429)) {
-      console.error('Gemini rate limited in analyze-job, cooling down');
-      geminiCooldownUntil = Date.now() + 3600000;
-    }
+    handleGeminiError(error);
     console.error('Error in analyze-job:', error);
     res.status(500).json({ error: error.message || 'Failed to analyze job' });
   }
@@ -552,10 +565,7 @@ ${toneInstructions}
       deliveryTime: parsed.deliveryTime || '۴ ساعت',
     });
   } catch (error: any) {
-    if (error && (error.message?.includes('429') || error.code === 429)) {
-      console.error('Gemini rate limited in generate-proposal, cooling down');
-      geminiCooldownUntil = Date.now() + 3600000;
-    }
+    handleGeminiError(error);
     console.error('Error in generate-proposal:', error);
     res.status(500).json({ error: error.message || 'Failed to generate proposal' });
   }
@@ -700,10 +710,7 @@ if __name__ == '__main__':
       files: parsed.files || {}
     });
   } catch (error: any) {
-    if (error && (error.message?.includes('429') || error.code === 429)) {
-      console.error('Gemini rate limited in generate-solution, cooling down');
-      geminiCooldownUntil = Date.now() + 3600000;
-    }
+    handleGeminiError(error);
     console.error('Error in generate-solution:', error);
     res.status(500).json({ error: error.message || 'Failed to generate solution' });
   }
