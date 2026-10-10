@@ -2,6 +2,10 @@ export type PlatformKey = 'all' | 'ponisha' | 'karlancer' | 'parskoders' | 'glob
 
 export type CategoryKey = 'all' | 'scraping' | 'telegram' | 'data' | 'api' | 'automation';
 
+export type PriorityLevel = 'High' | 'Medium' | 'Low';
+
+export type JobCategoryTag = 'Frontend' | 'Backend' | 'DevOps' | 'Design';
+
 export interface FreelanceJob {
   id: string;
   platform: string;
@@ -21,6 +25,9 @@ export interface FreelanceJob {
   proposalsCount: number;
   avgBid: number;
   status: 'new' | 'bidded' | 'in_progress' | 'ready' | 'completed';
+  priority?: PriorityLevel;
+  categorizedTag?: JobCategoryTag;
+  completedAt?: string; // ISO date e.g. '2026-10-09'
   aiAnalysis?: AIAnalysis;
   proposal?: string;
   proposedPrice?: number;
@@ -57,6 +64,8 @@ export interface ActivityLogItem {
 
 export interface UserSettings {
   githubToken: string;
+  githubUseSSH: boolean;
+  githubSSHKey: string;
   defaultDiscountRate: number; // e.g. 15 (%)
   autoBidThreshold: number; // e.g. 85 (%)
   cyborgMode: boolean;

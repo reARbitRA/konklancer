@@ -1,4 +1,13 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
+import { 
+  ResponsiveContainer, 
+  LineChart, 
+  Line, 
+  XAxis, 
+  YAxis, 
+  CartesianGrid, 
+  Tooltip 
+} from 'recharts';
 import { 
   Sparkles, 
   Radar, 
@@ -13,13 +22,15 @@ import {
   Coins, 
   CheckCircle2,
   Terminal,
-  Zap
+  Zap,
+  TrendingUp
 } from 'lucide-react';
-import { ActivityLogItem, UserSettings } from '../types';
+import { ActivityLogItem, UserSettings, FreelanceJob } from '../types';
 
 interface AutoPilotPanelProps {
   logs: ActivityLogItem[];
   settings: UserSettings;
+  jobs: FreelanceJob[];
   onUpdateSettings: (newSettings: Partial<UserSettings>) => void;
   onTriggerManualScan: () => void;
   isScanning: boolean;
@@ -28,12 +39,50 @@ interface AutoPilotPanelProps {
 export const AutoPilotPanel: React.FC<AutoPilotPanelProps> = ({
   logs,
   settings,
+  jobs,
   onUpdateSettings,
   onTriggerManualScan,
   isScanning,
 }) => {
   const [engineActive, setEngineActive] = useState(true);
   const [scanInterval, setScanInterval] = useState('2');
+  const [bridgeStatus, setBridgeStatus] = useState<any>(null);
+
+  React.useEffect(() => {
+    fetch('/api/bridge/status')
+      .then(res => res.json())
+      .then(data => setBridgeStatus(data.status))
+      .catch(console.error);
+  }, []);
+
+  // Completed jobs & today's calculations for the chart
+  const completedJobs = useMemo(() => jobs.filter((j) => j.status === 'completed'), [jobs]);
+  
+  const last7DaysChartData = useMemo(() => {
+    const dayNames = ['یکشنبه', 'دوشنبه', 'سه‌شنبه', 'چهارشنبه', 'پنج‌شنبه', 'جمعه', 'شنبه'];
+    const result = [];
+    const today = new Date();
+
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(today);
+      d.setDate(d.getDate() - i);
+      const isoDate = d.toISOString().split('T')[0];
+      const dayName = i === 0 ? 'امروز' : i === 1 ? 'دیروز' : dayNames[d.getDay()];
+      
+      const dayMonth = d.toLocaleDateString('fa-IR', { month: 'short', day: 'numeric' });
+      
+      const dayJobs = completedJobs.filter((j) => (j.completedAt ? j.completedAt === isoDate : i === 0));
+      const dayTotal = dayJobs.reduce((acc, j) => acc + (j.proposedPrice || j.budget || 0), 0);
+
+      result.push({
+        dateKey: isoDate,
+        dayLabel: dayName,
+        fullDateLabel: dayMonth,
+        earnings: dayTotal,
+      });
+    }
+    return result;
+  }, [completedJobs]);
 
   return (
     <div className="space-y-6">
@@ -46,6 +95,25 @@ export const AutoPilotPanel: React.FC<AutoPilotPanelProps> = ({
         <p className="text-xs text-slate-400 mt-1">
           رصد مستمر بازارهای فریلنسری داخلی و بین‌المللی · فیلتر خودکار تسک‌های زودبازده با کمترین زحمت ممکن
         </p>
+      </div>
+
+      {/* Visual Chart Panel */}
+      <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-sm space-y-4">
+        <h2 className="text-sm font-bold text-white flex items-center gap-2">
+          <TrendingUp className="h-4 w-4 text-emerald-400" />
+          <span>روند درآمد ۷ روز اخیر</span>
+        </h2>
+        <div className="h-48 w-full">
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart data={last7DaysChartData}>
+              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
+              <XAxis dataKey="dayLabel" stroke="#64748b" fontSize={11} tickLine={false} axisLine={false} />
+              <YAxis stroke="#64748b" fontSize={10} tickLine={false} axisLine={false} tickFormatter={(v) => `${(v / 1000000).toFixed(1)}M`} />
+              <Tooltip contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155', fontSize: '12px' }} />
+              <Line type="monotone" dataKey="earnings" stroke="#10b981" strokeWidth={2} dot={{ fill: '#0f172a', stroke: '#10b981', r: 3 }} />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
       </div>
 
       {/* Engine Status Grid */}
@@ -153,18 +221,18 @@ export const AutoPilotPanel: React.FC<AutoPilotPanelProps> = ({
           <div className="space-y-2">
             <span className="text-xs text-slate-400 font-medium block">پوشش لحظه‌ای پلتفرم‌ها:</span>
             <div className="space-y-1.5 text-xs">
-              <div className="flex items-center justify-between text-slate-300">
-                <span>پونیشا (Ponisha):</span>
-                <span className="text-emerald-400 font-mono">متصل · بدون مسدودی</span>
-              </div>
-              <div className="flex items-center justify-between text-slate-300">
-                <span>کارلانسر (Karlancer):</span>
-                <span className="text-emerald-400 font-mono">متصل · نرخ پاسخ ۸۹٪</span>
-              </div>
-              <div className="flex items-center justify-between text-slate-300">
-                <span>پارسکدرز (ParsKoders):</span>
-                <span className="text-emerald-400 font-mono">متصل · فید فعال</span>
-              </div>
+              {bridgeStatus ? (
+                bridgeStatus.activePlatforms.map((p: any) => (
+                  <div key={p.name} className="flex items-center justify-between text-slate-300">
+                    <span>{p.name}:</span>
+                    <span className="text-emerald-400 font-mono">
+                      {p.status === 'active' ? 'متصل' : 'قطع'} · {p.latency}
+                    </span>
+                  </div>
+                ))
+              ) : (
+                <p className="text-slate-500 italic">در حال دریافت وضعیت...</p>
+              )}
             </div>
           </div>
 

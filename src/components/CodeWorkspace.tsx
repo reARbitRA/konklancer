@@ -15,17 +15,22 @@ import {
   ExternalLink
 } from 'lucide-react';
 import { FreelanceJob } from '../types';
+import { GitHubWorkflowManager } from './GitHubWorkflowManager';
 
 interface CodeWorkspaceProps {
   job: FreelanceJob | null;
+  githubToken: string;
   onOpenGitHubPush: (job: FreelanceJob, files: Record<string, string>) => void;
   onUpdateJobFiles: (jobId: string, files: Record<string, string>) => void;
+  onUpdateJobRepoUrl: (jobId: string, repoUrl: string) => void;
 }
 
 export const CodeWorkspace: React.FC<CodeWorkspaceProps> = ({
   job,
+  githubToken,
   onOpenGitHubPush,
   onUpdateJobFiles,
+  onUpdateJobRepoUrl,
 }) => {
   const [activeFile, setActiveFile] = useState<string>('main.py');
   const [files, setFiles] = useState<Record<string, string>>({});
@@ -45,6 +50,17 @@ export const CodeWorkspace: React.FC<CodeWorkspaceProps> = ({
       }
     }
   }, [job?.id]);
+
+  // ... in return statement
+  
+          {/* GitHub Workflow Manager Card */}
+          {job && job.status === 'in_progress' && !job.repoUrl && (
+             <GitHubWorkflowManager
+               job={job}
+               githubToken={githubToken}
+               onRepoCreated={(url) => onUpdateJobRepoUrl(job.id, url)}
+             />
+          )}
 
   const generateSolution = async () => {
     if (!job) return;
@@ -233,6 +249,15 @@ export const CodeWorkspace: React.FC<CodeWorkspaceProps> = ({
 
         {/* Sidebar & Test Execution Console (4 cols) */}
         <div className="lg:col-span-4 flex flex-col gap-4">
+          {/* GitHub Workflow Manager Card */}
+          {job.status === 'in_progress' && !job.repoUrl && (
+             <GitHubWorkflowManager
+               job={job}
+               githubToken={githubToken}
+               onRepoCreated={(url) => onUpdateJobRepoUrl(job.id, url)}
+             />
+          )}
+
           {/* Quick Actions Panel */}
           <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 space-y-3">
             <h3 className="text-xs font-bold text-white flex items-center justify-between">
