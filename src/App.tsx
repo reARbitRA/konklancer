@@ -71,17 +71,27 @@ export default function App() {
   });
 
   const [settings, setSettings] = useState<UserSettings>(() => {
-    const saved = localStorage.getItem('freelanceflow_settings');
-    return saved
-      ? JSON.parse(saved)
-      : {
-          githubToken: '',
-          defaultDiscountRate: 18,
-          autoBidThreshold: 85,
-          cyborgMode: true,
-          preferredTone: 'friendly_expert',
-          dailyEarningsGoal: 5000000,
-        };
+    const defaults = {
+      githubToken: '',
+      defaultDiscountRate: 18,
+      autoBidThreshold: 85,
+      cyborgMode: true,
+      preferredTone: 'friendly_expert',
+      dailyEarningsGoal: 5000000,
+    };
+    // SPEC-003 R2: the GitHub token lives only in sessionStorage; any copy left
+    // in localStorage by older builds is removed here.
+    let parsed: Partial<UserSettings> = {};
+    try {
+      const saved = localStorage.getItem('freelanceflow_settings');
+      if (saved) parsed = JSON.parse(saved);
+    } catch (e) {
+      console.error('Failed to parse settings from localStorage:', e);
+    }
+    const { githubToken: legacyToken, ...rest } = parsed as any;
+    if (legacyToken !== undefined) localStorage.removeItem('freelanceflow_settings');
+    const sessionToken = sessionStorage.getItem('freelanceflow_github_token') || '';
+    return { ...defaults, ...rest, githubToken: sessionToken || legacyToken || '' };
   });
 
   const [logs, setLogs] = useState<ActivityLogItem[]>([
@@ -142,7 +152,14 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    localStorage.setItem('freelanceflow_settings', JSON.stringify(settings));
+    // SPEC-003 R2: persist everything except the token in localStorage.
+    const { githubToken, ...persistable } = settings;
+    localStorage.setItem('freelanceflow_settings', JSON.stringify(persistable));
+    if (githubToken) {
+      sessionStorage.setItem('freelanceflow_github_token', githubToken);
+    } else {
+      sessionStorage.removeItem('freelanceflow_github_token');
+    }
   }, [settings]);
 
   // Sound feedback using Web Audio API
@@ -564,7 +581,7 @@ export default function App() {
               setJobs(prev => prev.map(j => j.id === jobToInit.id ? { ...j, repoUrl } : j));
               setJobToInit(null);
             }}
-            autoStart={true}
+            autoStart={false}
           />
         )}
 

@@ -5,6 +5,7 @@ import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
 import { Server as SocketIOServer } from 'socket.io';
 import { GoogleGenAI } from '@google/genai';
+import { checkContent } from './server/contentFilter';
 
 dotenv.config();
 
@@ -40,26 +41,6 @@ const ai = apiKey
 
 // Initial jobs catalog
 const DEFAULT_JOBS = [
-  {
-    id: 'pon-9421',
-    platform: 'پونیشا',
-    platformKey: 'ponisha',
-    title: 'نوشتن اسکریپت پایتون استخراج شماره تماس و آدرس از سایت دیوار و شیپور',
-    clientName: 'احسان ک.',
-    clientRating: 4.9,
-    clientReviews: 14,
-    budget: 3500000,
-    budgetFormatted: '۳,۵۰۰,۰۰۰ تومان',
-    deadline: '۱ روز',
-    postedTime: '۱۴ دقیقه پیش',
-    category: 'وب اسکرپینگ / پایتون',
-    categoryKey: 'scraping',
-    tags: ['Python', 'Playwright', 'BeautifulSoup', 'CSV Export'],
-    description: 'یک اسکریپت سریع و بدون بلاک شدن برای وب‌سایت شیپور و دیوار می‌خواهم که بتواند آگهی‌های دسته‌بندی املاک را اسکن کند، شماره‌های تایید شده و لینک‌ها را در یک فایل اکسل مرتب با تاریخ ذخیره کند. دور زدن کپچا و رعایت تاخیر هوشمند ضروری است.',
-    proposalsCount: 6,
-    avgBid: 3200000,
-    status: 'new'
-  },
   {
     id: 'kar-8812',
     platform: 'کارلانسر',
@@ -162,6 +143,8 @@ const DEFAULT_JOBS = [
   }
 ];
 
+// Demo-only feed. SPEC-004 R1: fabricated jobs are emitted only when KONKLANCER_DEMO=1.
+const DEMO_FEED = process.env.KONKLANCER_DEMO === '1';
 // Bridge Feed Pool for real-time live push updates
 const BRIDGE_FEED_POOL = [
   {
@@ -357,6 +340,16 @@ io.on('connection', (socket) => {
       message: 'بریج بک‌اند در حال دریافت آخرین آگهی‌های لحظه‌ای از وب‌هوک و فید پلتفرم‌ها...',
     });
 
+    if (!DEMO_FEED) {
+      socket.emit('bridge:log', {
+        id: `log-${Date.now()}`,
+        timestamp: new Date().toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' }),
+        type: 'scan',
+        message: 'اسکنر واقعی هنوز به بریج متصل نیست؛ هیچ پروژه‌ی ساختگی تولید نشد.',
+      });
+      return;
+    }
+
     setTimeout(() => {
       broadcastNewJob();
     }, 600);
@@ -368,14 +361,20 @@ io.on('connection', (socket) => {
 });
 
 // Periodic background poller pushing new opportunities to connected clients
-setInterval(() => {
-  if (io.engine.clientsCount > 0) {
-    broadcastNewJob();
-  }
-}, 45000);
+if (DEMO_FEED) {
+  setInterval(() => {
+    if (io.engine.clientsCount > 0) {
+      broadcastNewJob();
+    }
+  }, 45000);
+}
 
 // Endpoint: Trigger bridge broadcast via REST API
 app.post('/api/bridge/trigger-scan', async (_req: Request, res: Response) => {
+  if (!DEMO_FEED) {
+    // Real scanner integration is SPEC-004 (not yet implemented).
+    return res.json({ success: false, job: null, message: 'اسکنر واقعی هنوز متصل نیست (KONKLANCER_DEMO=0).' });
+  }
   const job = await broadcastNewJob();
   res.json({ success: true, job });
 });
@@ -417,6 +416,10 @@ app.get('/api/bridge/status', (_req: Request, res: Response) => {
 app.post('/api/analyze-job', async (req: Request, res: Response) => {
   try {
     const { title, description, budget, platform } = req.body;
+    const check = checkContent(title, description);
+    if (check.blocked) {
+      return res.status(422).json({ blocked: true, error: check.reason, reason: check.reason });
+    }
 
     if (!title || !description) {
       return res.status(400).json({ error: 'Job title and description are required' });
@@ -497,6 +500,10 @@ app.post('/api/analyze-job', async (req: Request, res: Response) => {
 app.post('/api/generate-proposal', async (req: Request, res: Response) => {
   try {
     const { title, description, budget, tone = 'friendly_expert' } = req.body;
+    const check = checkContent(title, description);
+    if (check.blocked) {
+      return res.status(422).json({ blocked: true, error: check.reason, reason: check.reason });
+    }
 
     if (!title || !description) {
       return res.status(400).json({ error: 'Job title and description are required' });
@@ -575,6 +582,10 @@ ${toneInstructions}
 app.post('/api/generate-solution', async (req: Request, res: Response) => {
   try {
     const { title, description } = req.body;
+    const check = checkContent(title, description);
+    if (check.blocked) {
+      return res.status(422).json({ blocked: true, error: check.reason, reason: check.reason });
+    }
 
     if (!title) {
       return res.status(400).json({ error: 'Job title is required' });
@@ -727,6 +738,8 @@ async function startServer() {
         middlewareMode: true,
         hmr: false,
         watch: null,
+        // Allow the sandbox live-preview host (*.e2b.app) and localhost only.
+        allowedHosts: ['.e2b.app', 'localhost', '127.0.0.1'],
       },
       appType: 'spa',
     });
