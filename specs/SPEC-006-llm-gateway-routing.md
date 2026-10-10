@@ -2,7 +2,7 @@
 id: SPEC-006
 title: LLM access through Konkred gateway (free-tier pool, rotation, task routing)
 type: spec
-status: DRAFT
+status: APPROVED
 version: 0.1.0
 tags: [llm, gateway, routing, cost]
 supersedes: "SPEC-003 Q2 (model names) — answered by user: remove the Gemini model from konklancer"

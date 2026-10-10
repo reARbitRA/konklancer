@@ -4,7 +4,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
 import { Server as SocketIOServer } from 'socket.io';
-import { GoogleGenAI } from '@google/genai';
+import { callLLM, LLMError, parseJsonLoose, readLLMConfig } from './server/llm';
 import { checkContent } from './server/contentFilter';
 
 dotenv.config();
@@ -26,18 +26,7 @@ const io = new SocketIOServer(httpServer, {
 
 app.use(express.json({ limit: '10mb' }));
 
-// Initialize GoogleGenAI SDK according to system instructions
-const apiKey = process.env.GEMINI_API_KEY || '';
-const ai = apiKey
-  ? new GoogleGenAI({
-      apiKey,
-      httpOptions: {
-        headers: {
-          'User-Agent': 'aistudio-build',
-        },
-      },
-    })
-  : null;
+// AI access: see server/llm.ts (SPEC-006). No provider SDK is used here.
 
 // Initial jobs catalog
 const DEFAULT_JOBS = [
@@ -211,35 +200,17 @@ const BRIDGE_FEED_POOL = [
 
 let feedIndex = 0;
 
-let geminiCooldownUntil = 0;
 
-function handleGeminiError(err: any): number {
-  if (err && (err.message?.includes('429') || err.code === 429)) {
-    let delayMs = 3600000; // Default 1 hour
-    if (err.details && Array.isArray(err.details)) {
-        const retryInfo = err.details.find((d: any) => d['@type']?.includes('RetryInfo'));
-        if (retryInfo && retryInfo.retryDelay) {
-            const seconds = parseInt(retryInfo.retryDelay);
-            if (!isNaN(seconds)) {
-                delayMs = seconds * 1000;
-            }
-        }
-    }
-    console.error(`Gemini rate limited, cooling down for ${delayMs}ms`);
-    geminiCooldownUntil = Date.now() + delayMs;
-    return delayMs;
-  }
-  return 0;
+function keywordCategory(title: string, description: string): 'Frontend' | 'Backend' | 'DevOps' | 'Design' {
+  const text = `${title} ${description}`.toLowerCase();
+  if (/react|vue|angular|frontend|فرانت|html|css|tailwind|ui|جاوااسکریپت|next\.js/i.test(text)) return 'Frontend';
+  if (/devops|docker|داکر|kubernetes|کوبرنتیز|linux|لینوکس|ci\/cd|deploy|سرور|nginx/i.test(text)) return 'DevOps';
+  if (/design|طراحی|لوگو|figma|فیگما|فتوشاپ|photoshop|ui\/ux|گرافیک|بنر/i.test(text)) return 'Design';
+  return 'Backend';
 }
 
-async function categorizeJobWithGeminiServer(title: string, description: string): Promise<'Frontend' | 'Backend' | 'DevOps' | 'Design'> {
-  if (!ai || Date.now() < geminiCooldownUntil) {
-    const text = `${title} ${description}`.toLowerCase();
-    if (/react|vue|angular|frontend|فرانت|html|css|tailwind|ui|جاوااسکریپت|next\.js/i.test(text)) return 'Frontend';
-    if (/devops|docker|داکر|kubernetes|کوبرنتیز|linux|لینوکس|ci\/cd|deploy|سرور|nginx/i.test(text)) return 'DevOps';
-    if (/design|طراحی|لوگو|figma|فیگما|فتوشاپ|photoshop|ui\/ux|گرافیک|بنر/i.test(text)) return 'Design';
-    return 'Backend';
-  }
+async function categorizeJobServer(title: string, description: string): Promise<'Frontend' | 'Backend' | 'DevOps' | 'Design'> {
+  if (!readLLMConfig()) return keywordCategory(title, description);
   try {
     const prompt = `Categorize this freelance job into exactly one of: Frontend, Backend, DevOps, Design.
 Job Title: ${title}
@@ -247,22 +218,22 @@ Job Description: ${description}
 
 Return only JSON:
 {"tag": "Frontend" | "Backend" | "DevOps" | "Design"}`;
-
-    const response = await ai.models.generateContent({
-      model: 'gemini-3.8-flash',
-      contents: prompt,
-      config: {
-        responseMimeType: 'application/json',
-      },
-    });
-    const parsed = JSON.parse(response.text || '{}');
+    const llm = await callLLM({ taskType: 'extraction', prompt, json: true, maxTokens: 64, temperature: 0 });
+    const parsed = parseJsonLoose(llm.text) ?? {};
     const valid = ['Frontend', 'Backend', 'DevOps', 'Design'];
-    return valid.includes(parsed.tag) ? (parsed.tag as any) : 'Backend';
+    return valid.includes(parsed.tag) ? (parsed.tag as any) : keywordCategory(title, description);
   } catch (err: any) {
-    handleGeminiError(err);
-    console.warn('Gemini categorization failed on server:', err);
-    return 'Backend';
+    console.warn('AI categorization unavailable, using keyword rules:', err?.message ?? err);
+    return keywordCategory(title, description);
   }
+}
+
+// Uniform error mapping for AI endpoints (SPEC-006 R5, R10).
+function sendLLMError(res: Response, err: unknown, fallbackMessage: string) {
+  if (err instanceof LLMError) {
+    return res.status(err.status).json({ success: false, aiAvailable: false, code: err.code, error: err.message });
+  }
+  return res.status(500).json({ success: false, aiAvailable: false, code: 'AI_UPSTREAM', error: fallbackMessage });
 }
 
 async function broadcastNewJob(customPayload?: any) {
@@ -276,7 +247,7 @@ async function broadcastNewJob(customPayload?: any) {
   const priority = budget >= 6000000 ? 'High' : budget >= 4000000 ? 'Medium' : 'Low';
   
   // Categorize tag using Gemini AI
-  const categorizedTag = await categorizeJobWithGeminiServer(template.title, template.description);
+  const categorizedTag = await categorizeJobServer(template.title, template.description);
 
   const newJob = {
     id: newJobId,
@@ -383,11 +354,11 @@ app.post('/api/bridge/trigger-scan', async (_req: Request, res: Response) => {
 app.post('/api/categorize-job', async (req: Request, res: Response) => {
   try {
     const { title = '', description = '' } = req.body;
-    const tag = await categorizeJobWithGeminiServer(title, description);
+    const tag = await categorizeJobServer(title, description);
     res.json({ success: true, tag });
   } catch (error: any) {
     console.error('Error in categorize-job:', error);
-    res.status(500).json({ error: error.message || 'Failed to categorize job' });
+    return sendLLMError(res, error, 'Failed to categorize job');
   }
 });
 
@@ -425,28 +396,7 @@ app.post('/api/analyze-job', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Job title and description are required' });
     }
 
-    if (!ai || Date.now() < geminiCooldownUntil) {
-      // High-grade intelligent local analysis fallback if no API key
-      const isPython = /پایتون|python|script|اسکریپت/i.test(title + description);
-      const isScraping = /اسکرپ|scrape|دیوار|شیپور|دیجی‌کالا/i.test(title + description);
-      const isTelegram = /تلگرام|telegram|ربات/i.test(title + description);
-
-      const automatabilityScore = isPython || isScraping || isTelegram ? 96 : 82;
-      const recommendedBid = budget ? Math.round(budget * 0.82) : 2800000;
-
-      return res.json({
-        success: true,
-        automatabilityScore,
-        recommendedBid,
-        recommendedBidFormatted: recommendedBid.toLocaleString('fa-IR') + ' تومان',
-        suggestedDuration: '۴ تا ۶ ساعت',
-        technicalStack: ['Python 3.11', 'Asyncio', 'Playwright / Requests', 'Pydantic'],
-        feasibilityReason: 'این پروژه کاملاً ساختاریافته است و بدون نیاز به حضور فیزیکی یا مذاکره تلفنی، توسط موتور ایجنت در کمتر از ۱ ساعت کدنویسی و تست می‌شود.',
-        riskLevel: 'low',
-        winProbability: '۸۸٪ با تحویل فوری زیر ۴ ساعت',
-        suggestedKicker: 'اشاره دقیق به ساختار فایل اکسل و هندل کردن خطای مسدودسازی IP'
-      });
-    }
+    if (!readLLMConfig()) return sendLLMError(res, new LLMError('AI_NOT_CONFIGURED', 'KONKRED_GATEWAY_URL و KONKRED_API_KEY تنظیم نشده‌اند.', 503), 'AI not configured');
 
     const prompt = `شما معمار ارشد سیستم‌های اتوماسیون هوش مصنوعی فریلنسری هستید.
 پروژه فریلنسری زیر از پلتفرم "${platform || 'فریلنسری'}" را تحلیل فنی و اقتصادی کنید:
@@ -466,19 +416,14 @@ app.post('/api/analyze-job', async (req: Request, res: Response) => {
   "suggestedKicker": "نکته کلیدی که باید در خط اول پیشنهاد به آن اشاره شود تا کارفرما متوجه شود پروژه دقیق خوانده شده است"
 }`;
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-3.8-flash',
-      contents: prompt,
-      config: {
-        responseMimeType: 'application/json',
-      },
-    });
-
-    const parsed = JSON.parse(response.text || '{}');
+    const llm = await callLLM({ taskType: 'general', prompt, json: true, cacheKey: `analyze:${platform}|${title}|${description}|${budget}` });
+    const parsed = parseJsonLoose(llm.text) ?? {};
     const recommendedBid = parsed.recommendedBid || (budget ? Math.round(budget * 0.85) : 3000000);
 
     return res.json({
       success: true,
+      aiAvailable: true,
+      model: llm.model,
       automatabilityScore: parsed.automatabilityScore || 92,
       recommendedBid,
       recommendedBidFormatted: recommendedBid.toLocaleString('fa-IR') + ' تومان',
@@ -490,9 +435,8 @@ app.post('/api/analyze-job', async (req: Request, res: Response) => {
       suggestedKicker: parsed.suggestedKicker || 'اشاره به استراتژی حل سریع مسئله'
     });
   } catch (error: any) {
-    handleGeminiError(error);
     console.error('Error in analyze-job:', error);
-    res.status(500).json({ error: error.message || 'Failed to analyze job' });
+    return sendLLMError(res, error, 'Failed to analyze job');
   }
 });
 
@@ -511,21 +455,7 @@ app.post('/api/generate-proposal', async (req: Request, res: Response) => {
 
     const targetPrice = budget ? Math.round(budget * 0.82) : 2500000;
 
-    if (!ai || Date.now() < geminiCooldownUntil) {
-      // Fallback high-conversion proposal
-      const proposalText = `سلام و احترام.
-توضیحات پروژه شما برای "${title.slice(0, 45)}" را دقیق بررسی کردم.
-سیستم من هم‌اکنون آماده است و راهکار مقابله با محدودیت‌ها و ساختار خروجی مورد نظرتان را دقیقاً پیاده‌سازی کرده‌ام. پروژه را همراه با سورس تست‌شده و فایل راهنمای اجرای گام‌به‌گام (README فارسی) روی ریپازیتوری گیت‌هاب ظرف چند ساعت آینده تقدیمتان می‌کنم.
-در صورت تمایل تایید بفرمایید تا بلافاصله استارت بزنیم.`;
-
-      return res.json({
-        success: true,
-        proposal: proposalText,
-        proposedPrice: targetPrice,
-        proposedPriceFormatted: targetPrice.toLocaleString('fa-IR') + ' تومان',
-        deliveryTime: 'امروز (تحویل سریع)',
-      });
-    }
+    if (!readLLMConfig()) return sendLLMError(res, new LLMError('AI_NOT_CONFIGURED', 'KONKRED_GATEWAY_URL و KONKRED_API_KEY تنظیم نشده‌اند.', 503), 'AI not configured');
 
     const toneInstructionsMap: Record<string, string> = {
       friendly_expert: 'لحن: یک مهندس نرم‌افزار حرفه‌ای، صمیمی، خاکی و قابل اعتماد.',
@@ -554,27 +484,21 @@ ${toneInstructions}
   "deliveryTime": "۴ ساعت"
 }`;
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-3.8-flash',
-      contents: prompt,
-      config: {
-        responseMimeType: 'application/json',
-      },
-    });
-
-    const parsed = JSON.parse(response.text || '{}');
+    const llm = await callLLM({ taskType: 'general', prompt, json: true });
+    const parsed = parseJsonLoose(llm.text) ?? {};
 
     return res.json({
       success: true,
+      aiAvailable: true,
+      model: llm.model,
       proposal: parsed.proposal,
       proposedPrice: parsed.proposedPrice || targetPrice,
       proposedPriceFormatted: (parsed.proposedPrice || targetPrice).toLocaleString('fa-IR') + ' تومان',
       deliveryTime: parsed.deliveryTime || '۴ ساعت',
     });
   } catch (error: any) {
-    handleGeminiError(error);
     console.error('Error in generate-proposal:', error);
-    res.status(500).json({ error: error.message || 'Failed to generate proposal' });
+    return sendLLMError(res, error, 'Failed to generate proposal');
   }
 });
 
@@ -591,102 +515,7 @@ app.post('/api/generate-solution', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Job title is required' });
     }
 
-    if (!ai || Date.now() < geminiCooldownUntil) {
-      // Rich default codebase fallback
-      return res.json({
-        success: true,
-        files: {
-          'main.py': `# -*- coding: utf-8 -*-
-"""
-پروژه: ${title}
-تولید شده به صورت خودکار توسط ایجنت FreelanceFlow AI
-"""
-import sys
-import time
-import logging
-from typing import List, Dict, Any
-
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - [%(levelname)s] - %(message)s'
-)
-logger = logging.getLogger(__name__)
-
-class SolutionEngine:
-    def __init__(self):
-        logger.info("Initializing task execution pipeline...")
-        self.status = "READY"
-
-    def execute(self) -> Dict[str, Any]:
-        """اجرای منطق اصلی تسک با مدیریت کامل خطاها"""
-        logger.info("Starting processing loop...")
-        try:
-            # شبیه‌سازی مراحل پردازش تسک
-            time.sleep(0.5)
-            logger.info("Task completed successfully with 0 errors.")
-            return {
-                "success": True,
-                "message": "عملیات با موفقیت انجام شد",
-                "processed_items": 42
-            }
-        except Exception as e:
-            logger.error(f"Critical execution error: {str(e)}")
-            return {"success": False, "error": str(e)}
-
-if __name__ == '__main__':
-    engine = SolutionEngine()
-    result = engine.execute()
-    print("خروجی:", result)
-`,
-          'requirements.txt': `requests>=2.31.0
-playwright>=1.41.0
-pandas>=2.2.0
-openpyxl>=3.1.2
-python-dotenv>=1.0.1
-pydantic>=2.6.0
-`,
-          'README.md': `# راهنمای اجرای پروژه: ${title}
-
-سلام کارفرمای محترم،
-این پروژه به صورت کامل، بهینه‌سازی‌شده و تست‌شده طبق خواسته شما پیاده‌سازی شده است.
-
----
-
-### ۱. پیش‌نیازها
-مطمئن شوید پایتون نسخه ۳.۱۰ یا بالاتر روی سیستم شما نصب است.
-
-### ۲. نصب کتابخانه‌ها
-ترمینال یا CMD را در پوشه پروژه باز کنید و دستور زیر را اجرا کنید:
-\`\`\`bash
-pip install -r requirements.txt
-\`\`\`
-
-### ۳. اجرای برنامه
-برای اجرای اسکریپت کافیست دستور زیر را وارد نمایید:
-\`\`\`bash
-python main.py
-\`\`\`
-
----
-*در صورت نیاز به هرگونه تغییر یا توسعه بیشتر، همواره آماده همکاری هستم.*
-`,
-          'test_suite.py': `import unittest
-from main import SolutionEngine
-
-class TestSolution(unittest.TestCase):
-    def setUp(self):
-        self.engine = SolutionEngine()
-
-    def test_execution(self):
-        res = self.engine.execute()
-        self.assertTrue(res.get("success"))
-
-if __name__ == '__main__':
-    unittest.main()
-`
-        }
-      });
-    }
+    if (!readLLMConfig()) return sendLLMError(res, new LLMError('AI_NOT_CONFIGURED', 'KONKRED_GATEWAY_URL و KONKRED_API_KEY تنظیم نشده‌اند.', 503), 'AI not configured');
 
     const prompt = `شما یک مهندس نرم‌افزار ارشد و ایجنت کدنویسی خودکار هستید.
 برای این پروژه فریلنسری:
@@ -706,24 +535,18 @@ if __name__ == '__main__':
   }
 }`;
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-3.8-flash',
-      contents: prompt,
-      config: {
-        responseMimeType: 'application/json',
-      },
-    });
-
-    const parsed = JSON.parse(response.text || '{}');
+    const llm = await callLLM({ taskType: 'code-generation', prompt, json: true, maxTokens: 8000 });
+    const parsed = parseJsonLoose(llm.text) ?? {};
 
     return res.json({
       success: true,
+      aiAvailable: true,
+      model: llm.model,
       files: parsed.files || {}
     });
   } catch (error: any) {
-    handleGeminiError(error);
     console.error('Error in generate-solution:', error);
-    res.status(500).json({ error: error.message || 'Failed to generate solution' });
+    return sendLLMError(res, error, 'Failed to generate solution');
   }
 });
 
@@ -750,6 +573,8 @@ async function startServer() {
       res.sendFile(path.join(__dirname, 'dist', 'index.html'));
     });
   }
+
+  if (!readLLMConfig()) console.warn('[llm] KONKRED_GATEWAY_URL / KONKRED_API_KEY not set: AI endpoints return 503 AI_NOT_CONFIGURED');
 
   httpServer.listen(PORT, '0.0.0.0', () => {
     console.log(`FreelanceFlow AI Server & Socket.io Bridge running at http://localhost:${PORT}`);

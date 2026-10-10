@@ -72,7 +72,7 @@ export const AIEvaluatorModal: React.FC<AIEvaluatorModalProps> = ({
               <Sparkles className="h-4 w-4" />
             </div>
             <div>
-              <h2 className="text-sm font-bold text-white">ارزیابی هوشمند پروژه با Gemini 3.8 Flash</h2>
+              <h2 className="text-sm font-bold text-white">ارزیابی هوشمند پروژه با Konkred AI</h2>
               <p className="text-[11px] text-slate-400 font-mono">پلتفرم: {job.platform} · شناسه: {job.id}</p>
             </div>
           </div>
@@ -109,7 +109,7 @@ export const AIEvaluatorModal: React.FC<AIEvaluatorModalProps> = ({
                 onClick={runAnalysis}
                 className="mt-2 px-5 py-2.5 bg-sky-500 hover:bg-sky-400 text-slate-950 font-medium rounded-lg text-xs shadow-md transition-all active:scale-95"
               >
-                اجرای تحلیل فوری (Gemini 3.8 Flash)
+                اجرای تحلیل فوری (Konkred AI)
               </button>
             </div>
           )}

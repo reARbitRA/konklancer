@@ -10,10 +10,10 @@
     "start": "tsx server.ts",
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
-    "test:scanner": "python3 -m pytest -q scanner/tests"
+    "test:scanner": "python3 -m pytest -q scanner/tests",
+    "test": "tsx --test server/*.test.ts"
   },
   "dependencies": {
-    "@google/genai": "^2.4.0",
     "@tailwindcss/vite": "^4.3.3",
     "@types/d3": "^7.4.3",
     "@vitejs/plugin-react": "^6.1.1",
