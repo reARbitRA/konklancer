@@ -49,8 +49,8 @@ one gateway credential.
   (`AI_UNAVAILABLE`). It must never be shown as analysis, proposal or code.
 - R5. Errors: gateway 429 → wait `retryAfterSec` (max 60 s) then one retry; 5xx/timeout → one retry with
   backoff; 401 → configuration error shown to the user. No infinite loops.
-- R6. Privacy: default `privacy: "private"` (excludes providers whose registry says `trainsOnData: true`).
-  Requires user decision — see Open Questions.
+- R6. Privacy: default `privacy: "any"` (user decision D2). Requests may reach providers that train on data.
+  Recommended PII redaction is listed under D2 and is not yet approved.
 - R7. Konklancer keeps its own cache for analyses keyed by sha256(taskType + job text) (SPEC-004 R4).
   The gateway cache is additional, not a replacement.
 - R8. The rule-based pre-filter (SPEC-004 R5) runs before any `callLLM` call.
@@ -68,16 +68,20 @@ one gateway credential.
 - AC-5: Given the same job text twice, when analysed, then the second call does not reach the gateway (Konklancer cache hit).
 - AC-6: Given `KONKRED_GATEWAY_URL` unset, when the app starts, then it logs a clear warning and AI endpoints return `503 AI_NOT_CONFIGURED`.
 
-## 5. Open Questions (user decision needed)
-- Q1. **`freelance_pro_engine.py`:** delete from the working tree (recommended; it contains auto-bid and
-  anti-bot logic that is out of scope; it stays in git history), or keep it as a non-running archive?
-- Q2. **Gemini scope:** remove Gemini from Konklancer only (gateway keeps it as one option), or also
-  disable the `gemini` provider in the gateway registry?
-- Q3. **Privacy default** (R6): `private` (client data never goes to providers that train on data — this excludes
-  Gemini and Mistral in the current registry), or `any` (more models available, more free-tier headroom)?
-- Q4. **"Fusion":** keep the gateway meaning (normalization and trimming, one model per request), or add
-  multi-model ensemble (ask 2–3 models and merge)? Ensemble uses 2–3× the free quota per request and is a
-  separate feature, so it would need its own spec.
+## 5. Decisions (user answers, 2026-10-10)
+- D1. **Gemini scope:** remove Gemini from Konklancer only. The gateway keeps Gemini as an option in its pool. (Answer: konklancer_only.)
+- D2. **Privacy default:** `any`. Client data may be sent to any provider in the pool, including providers
+  that train on data. (Answer: any.) Recommendation, not yet approved: strip phone numbers, emails and
+  client names from prompts before sending. Requires separate approval.
+- D3. **"Fusion":** keep gateway meaning (normalization and context trimming, one model per request). (Answer: normalize.)
+  Ensemble is out of scope.
+- D4. **`freelance_pro_engine.py`:** still OPEN. The user asked why deletion is needed. Current status: untouched.
+  Keeping it is allowed, provided it is never run and is not extended (SPEC-003 scope). Deleting it is a
+  cleanup choice, not a requirement of this spec.
+
+## 5b. Open Questions
+- Q1. Is this repository public on GitHub? (If yes, the engine file's auto-bid and anti-bot code is visible to anyone.)
+- Q2. Approve SPEC-006 as written with decisions D1–D4? (Required before code.)
 
 ## 6. Non-goals
 - Running the gateway inside this repo.
