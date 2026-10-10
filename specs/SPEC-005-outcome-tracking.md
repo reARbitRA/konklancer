@@ -2,7 +2,7 @@
 id: SPEC-005
 title: Bid Outcome Tracking & Win-Probability Calibration
 type: spec
-status: DRAFT
+status: APPROVED
 version: 0.1.0
 tags: [analytics, tracking, probability]
 ---

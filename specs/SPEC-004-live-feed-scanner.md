@@ -2,7 +2,7 @@
 id: SPEC-004
 title: Live Job Feed from Scanner
 type: spec
-status: DRAFT
+status: APPROVED
 version: 0.1.0
 tags: [scanner, feed, data]
 ---

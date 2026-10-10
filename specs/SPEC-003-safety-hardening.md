@@ -2,7 +2,7 @@
 id: SPEC-003
 title: Safety & Hardening
 type: spec
-status: DRAFT
+status: APPROVED
 version: 0.1.0
 tags: [security, safety, hardening]
 ---
@@ -31,3 +31,8 @@ tags: [security, safety, hardening]
 
 ## 4. Non-goals
 - احراز هویت کاربر نهایی (چندکاربره). فقط توکن سرویس.
+
+## 5. Open Questions (تأیید بعدی کاربر)
+- Q1: حذف `freelance_pro_engine.py` از مخزن؟ (تا پاسخ، فایل دست‌نخورده می‌ماند و اجرا نمی‌شود.)
+- Q2: نام مدل‌ها (`gemini-3.8-flash` یا مدل دیگر)؟ (تا پاسخ، از متغیر محیطی با همین مقدار پیش‌فرض خوانده می‌شود.)
+- Q3: R6 (حذف ساخت خودکار مخزن) — پیش‌فرض اعمال می‌شود چون در فهرست ایمنی کاربر بوده است.
