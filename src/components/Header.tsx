@@ -18,6 +18,7 @@ interface HeaderProps {
   isScanning: boolean;
   totalEarningsToday: number;
   activeJobsCount: number;
+  socketConnected?: boolean;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -28,6 +29,7 @@ export const Header: React.FC<HeaderProps> = ({
   isScanning,
   totalEarningsToday,
   activeJobsCount,
+  socketConnected = false,
 }) => {
   return (
     <header className="sticky top-0 z-40 w-full border-b border-slate-800/80 bg-slate-950/90 backdrop-blur-md">
@@ -42,6 +44,12 @@ export const Header: React.FC<HeaderProps> = ({
               <span>FreelanceFlow AI</span>
               <span className="text-[11px] font-normal text-emerald-400/90 font-mono">v2026.9</span>
             </a>
+          </div>
+
+          {/* Socket.io Live Status Badge */}
+          <div className="hidden lg:flex items-center gap-1.5 px-2 py-0.5 bg-slate-900 border border-slate-800 rounded-md text-[10px] font-mono text-slate-300">
+            <span className={`h-1.5 w-1.5 rounded-full ${socketConnected ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`} />
+            <span>{socketConnected ? 'Bridge Live' : 'Connecting...'}</span>
           </div>
         </div>
 

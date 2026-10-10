@@ -217,8 +217,38 @@ export const JobHunter: React.FC<JobHunterProps> = ({
                   </span>
                 </div>
 
-                {/* Budget */}
+                {/* Budget, Priority and Categorized Tag */}
                 <div className="flex items-center gap-2">
+                  {job.priority && (
+                    <span
+                      className={`px-2 py-0.5 rounded text-[10px] font-medium border ${
+                        job.priority === 'High'
+                          ? 'bg-rose-500/10 text-rose-300 border-rose-500/30'
+                          : job.priority === 'Medium'
+                          ? 'bg-amber-500/10 text-amber-300 border-amber-500/30'
+                          : 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30'
+                      }`}
+                    >
+                      {job.priority === 'High' ? 'بالا' : job.priority === 'Medium' ? 'متوسط' : 'پایین'}
+                    </span>
+                  )}
+
+                  {job.categorizedTag && (
+                    <span
+                      className={`px-2 py-0.5 rounded text-[10px] font-mono border ${
+                        job.categorizedTag === 'Frontend'
+                          ? 'bg-sky-500/10 text-sky-300 border-sky-500/30'
+                          : job.categorizedTag === 'Backend'
+                          ? 'bg-indigo-500/10 text-indigo-300 border-indigo-500/30'
+                          : job.categorizedTag === 'DevOps'
+                          ? 'bg-orange-500/10 text-orange-300 border-orange-500/30'
+                          : 'bg-pink-500/10 text-pink-300 border-pink-500/30'
+                      }`}
+                    >
+                      {job.categorizedTag}
+                    </span>
+                  )}
+
                   <span className="text-xs text-slate-400">بودجه کارفرما:</span>
                   <span className="font-mono text-sm font-bold text-emerald-400 tabular-nums">
                     {job.budgetFormatted}
