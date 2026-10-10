@@ -6,3 +6,7 @@ coverage/
 *.log
 .env*
 !.env.example
+scanner/out/
+__pycache__/
+.pytest_cache/
+data/

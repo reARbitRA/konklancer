@@ -53,7 +53,7 @@ export const GitHubDispatcher: React.FC<GitHubDispatcherProps> = ({
       ? `delivery-${job.platformKey}-${job.id.replace(/[^a-zA-Z0-9-]/g, '')}`
       : `delivery-task-${Date.now()}`
   );
-  const [isPrivate, setIsPrivate] = useState<boolean>(false);
+  const [isPrivate, setIsPrivate] = useState<boolean>(true); // SPEC-003 R1: private by default
   const [commitMessage, setCommitMessage] = useState<string>('Production delivery: source code and documentation');
 
   // Existing repos list from Octokit

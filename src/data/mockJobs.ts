@@ -8,28 +8,6 @@ const getPastDateStr = (daysAgo: number) => {
 
 export const INITIAL_JOBS: FreelanceJob[] = [
   {
-    id: 'pon-9421',
-    platform: 'پونیشا',
-    platformKey: 'ponisha',
-    title: 'نوشتن اسکریپت پایتون استخراج شماره تماس و مشخصات از سایت دیوار و شیپور',
-    clientName: 'احسان کاظمی',
-    clientRating: 4.9,
-    clientReviews: 14,
-    budget: 3500000,
-    budgetFormatted: '۳,۵۰۰,۰۰۰ تومان',
-    deadline: '۱ روز',
-    postedTime: '۱۴ دقیقه پیش',
-    category: 'وب اسکرپینگ / پایتون',
-    categoryKey: 'scraping',
-    tags: ['Python', 'Playwright', 'BeautifulSoup', 'CSV Export', 'Backend'],
-    description: 'یک اسکریپت پرسرعت و امن برای وب‌سایت شیپور و دیوار می‌خواهم که بتواند آگهی‌های دسته‌بندی املاک را اسکن کند، شماره‌های تماس تایید شده، قیمت و لینک‌ها را در یک فایل اکسل منظم با فرمت شمسی ذخیره کند. قابلیت رعایت تاخیر هوشمند و دور زدن لیمیت ضروری است.',
-    proposalsCount: 6,
-    avgBid: 3200000,
-    status: 'new',
-    priority: 'High',
-    categorizedTag: 'Backend'
-  },
-  {
     id: 'kar-8812',
     platform: 'کارلانسر',
     platformKey: 'karlancer',
