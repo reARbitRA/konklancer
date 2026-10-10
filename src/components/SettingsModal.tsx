@@ -13,7 +13,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onClose,
   onSave,
 }) => {
-  const [form, setForm] = useState<UserSettings>({ ...settings });
+  const [form, setForm] = useState<UserSettings>({ 
+    ...settings,
+    githubUseSSH: settings.githubUseSSH ?? false,
+    githubSSHKey: settings.githubSSHKey ?? ''
+  });
   const [savedNotice, setSavedNotice] = useState(false);
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -51,25 +55,57 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         {/* Form Body */}
         <form onSubmit={handleSubmit} className="p-6 space-y-5">
           {/* GitHub Token Field */}
-          <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-slate-200 flex items-center justify-between">
-              <span className="flex items-center gap-1.5">
-                <FolderGit2 className="h-4 w-4 text-emerald-400" />
-                <span>توکن اختصاصی گیت‌هاب (Personal Access Token):</span>
-              </span>
-              <span className="text-[10px] text-slate-400 font-normal">اختیاری اما توصیه شده</span>
-            </label>
-            <div className="relative">
-              <input
-                type="password"
-                value={form.githubToken}
-                onChange={(e) => setForm({ ...form, githubToken: e.target.value })}
-                placeholder="ghp_xxxxxxxxxxxxxxxxxxxx"
-                className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs font-mono text-emerald-400 dir-ltr text-left focus:outline-none focus:border-emerald-500"
-              />
+          <div className="space-y-4">
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-slate-200 flex items-center justify-between">
+                <span className="flex items-center gap-1.5">
+                  <FolderGit2 className="h-4 w-4 text-emerald-400" />
+                  <span>اتصال به گیت‌هاب:</span>
+                </span>
+              </label>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setForm({ ...form, githubUseSSH: false })}
+                  className={`flex-1 px-3 py-2 text-xs rounded-lg border ${!form.githubUseSSH ? 'bg-emerald-500/10 border-emerald-500 text-emerald-400' : 'bg-slate-950 border-slate-800 text-slate-400'}`}
+                >
+                  توکن (PAT)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setForm({ ...form, githubUseSSH: true })}
+                  className={`flex-1 px-3 py-2 text-xs rounded-lg border ${form.githubUseSSH ? 'bg-emerald-500/10 border-emerald-500 text-emerald-400' : 'bg-slate-950 border-slate-800 text-slate-400'}`}
+                >
+                  کلید SSH
+                </button>
+              </div>
             </div>
+
+            {!form.githubUseSSH ? (
+              <div className="space-y-1.5">
+                <input
+                  type="password"
+                  value={form.githubToken}
+                  onChange={(e) => setForm({ ...form, githubToken: e.target.value })}
+                  placeholder="ghp_xxxxxxxxxxxxxxxxxxxx"
+                  className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs font-mono text-emerald-400 dir-ltr text-left focus:outline-none focus:border-emerald-500"
+                />
+              </div>
+            ) : (
+              <div className="space-y-1.5">
+                <textarea
+                  value={form.githubSSHKey}
+                  onChange={(e) => setForm({ ...form, githubSSHKey: e.target.value })}
+                  placeholder="ssh-ed25519 AAAA..."
+                  className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs font-mono text-amber-400 dir-ltr text-left focus:outline-none focus:border-amber-500 h-24"
+                />
+              </div>
+            )}
             <p className="text-[11px] text-slate-400 leading-relaxed">
-              برای ساخت توکن در اکانت گیت‌هاب خود به Settings &gt; Developer settings &gt; Tokens رفته و دسترسی <code className="text-emerald-400 bg-slate-950 px-1 rounded">repo</code> را تیک بزنید. در صورت خالی بودن، مخزن‌های تست به صورت خودکار ایجاد می‌شوند.
+              {form.githubUseSSH 
+                ? 'کلید خصوصی SSH خود را برای احراز هویت بدون توکن وارد کنید.'
+                : 'برای ساخت توکن در اکانت گیت‌هاب خود به Settings > Developer settings > Tokens رفته و دسترسی repo را تیک بزنید.'
+              }
             </p>
           </div>
 

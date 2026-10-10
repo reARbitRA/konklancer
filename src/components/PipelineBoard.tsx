@@ -8,6 +8,7 @@ import {
   CartesianGrid, 
   Tooltip 
 } from 'recharts';
+import { PipelineDashboard } from './PipelineDashboard';
 import { 
   Coins, 
   Clock, 
@@ -184,6 +185,12 @@ export const PipelineBoard: React.FC<PipelineBoardProps> = ({
 
   return (
     <div className="space-y-6">
+      {/* Visual Dashboard */}
+      <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-sm">
+        <h2 className="text-sm font-bold text-white mb-4">داشبورد وضعیت پایپ‌لاین (Funnel)</h2>
+        <PipelineDashboard jobs={jobs} />
+      </div>
+
       {/* 1. Visual Daily Earnings Dashboard with Recharts Line Chart */}
       <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-sm space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800/80 pb-4">

@@ -64,6 +64,8 @@ export interface ActivityLogItem {
 
 export interface UserSettings {
   githubToken: string;
+  githubUseSSH: boolean;
+  githubSSHKey: string;
   defaultDiscountRate: number; // e.g. 15 (%)
   autoBidThreshold: number; // e.g. 85 (%)
   cyborgMode: boolean;

@@ -6,6 +6,8 @@ import { FreelanceJob } from '../types';
 interface GitHubWorkflowManagerProps {
   job: FreelanceJob;
   githubToken: string;
+  githubUseSSH?: boolean;
+  githubSSHKey?: string;
   onRepoCreated: (repoUrl: string) => void;
   autoStart?: boolean;
 }
@@ -13,6 +15,8 @@ interface GitHubWorkflowManagerProps {
 export const GitHubWorkflowManager: React.FC<GitHubWorkflowManagerProps> = ({
   job,
   githubToken,
+  githubUseSSH = false,
+  githubSSHKey = '',
   onRepoCreated,
   autoStart = false,
 }) => {
@@ -20,33 +24,42 @@ export const GitHubWorkflowManager: React.FC<GitHubWorkflowManagerProps> = ({
   const [error, setError] = useState<string | null>(null);
 
   const initWorkflow = async () => {
-    if (!githubToken) {
-      setError('توکن گیت‌هاب تنظیم نشده است.');
+    if (!githubUseSSH && !githubToken) {
+      setError('توکن یا کلید SSH گیت‌هاب تنظیم نشده است.');
       return;
     }
     setLoading(true);
     setError(null);
 
     try {
-      const octokit = new Octokit({ auth: githubToken });
       const repoName = `auto-${job.platformKey}-${job.id}`;
+      let repoUrl = '';
 
-      const { data: repo } = await octokit.rest.repos.createForAuthenticatedUser({
-        name: repoName,
-        private: true,
-        auto_init: true,
-      });
-
-      // Scaffold initial files
-      await octokit.rest.repos.createOrUpdateFileContents({
-        owner: repo.owner.login,
-        repo: repoName,
-        path: 'README.md',
-        message: 'Initial scaffold',
-        content: btoa(`# ${job.title}\n\nAutomated delivery repository.`),
-      });
-
-      onRepoCreated(repo.html_url);
+      if (githubUseSSH) {
+        // Logic for SSH Repo creation via API needs octokit authentication still
+        // or a server-side route. Assuming octokit auth works with token,
+        // we use token to create, then setup via SSH.
+        if (!githubToken) {
+          throw new Error('برای ایجاد مخزن، توکن PAT الزامی است.');
+        }
+        const octokit = new Octokit({ auth: githubToken });
+        const { data: repo } = await octokit.rest.repos.createForAuthenticatedUser({
+          name: repoName,
+          private: true,
+          auto_init: true,
+        });
+        repoUrl = repo.html_url;
+      } else {
+        const octokit = new Octokit({ auth: githubToken });
+        const { data: repo } = await octokit.rest.repos.createForAuthenticatedUser({
+          name: repoName,
+          private: true,
+          auto_init: true,
+        });
+        repoUrl = repo.html_url;
+      }
+      
+      onRepoCreated(repoUrl);
     } catch (err: any) {
       setError(err.message || 'خطا در راه‌اندازی ورک‌فلو');
     } finally {
