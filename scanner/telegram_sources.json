@@ -1,0 +1,68 @@
+{
+  "_meta": {
+    "description": "کانال‌ها و گروه‌های تلگرامی مرتبط با پروژه‌های فریلنسری ایران",
+    "checked_at": "2026-10-10",
+    "note": "فقط از روی نتایج جستجو و صفحات پیش‌نمایش عمومی فهرست شده‌اند. عضویت، محتوا و سلامت هیچ‌کدام تایید نشده است. کانال‌های آگهی‌دهنده را قبل از ارسال هرگونه اطلاعات یا پیش‌پرداخت بررسی کنید.",
+    "scan_method": "پیش‌نمایش عمومی t.me/s/<username> فقط برای کانال‌های عمومی و با نرخ محدود"
+  },
+  "channels": [
+    {
+      "username": "workarc",
+      "title": "فریلنسری مهندسی و معماری",
+      "url": "https://t.me/s/workarc",
+      "type": "project_feed",
+      "subscribers_seen": "حدود ۱۳٫۷ هزار",
+      "last_seen_activity": "پست‌های دارای مهلت ۱۴۰۵/۰۶/۱۰ دیده شد؛ تاریخ آخرین پست بررسی نشد",
+      "status": "likely_active",
+      "scan_enabled": false
+    },
+    {
+      "username": "freelancer_projects",
+      "title": "بانک جامع پروژه",
+      "url": "https://t.me/s/freelancer_projects",
+      "type": "project_feed",
+      "subscribers_seen": "نامشخص",
+      "last_seen_activity": "پست‌ها لینک پروژه‌های پارس‌کدرز و پونیشا دارند؛ تاریخ آخرین پست بررسی نشد",
+      "status": "unverified",
+      "scan_enabled": false
+    },
+    {
+      "username": "freelancer_sent",
+      "title": "فریلنسر | freelancer",
+      "url": "https://t.me/s/freelancer_sent",
+      "type": "project_feed",
+      "subscribers_seen": "حدود ۷۵",
+      "last_seen_activity": "نامشخص؛ دارای پست‌های تبلیغاتی",
+      "status": "unverified",
+      "scan_enabled": false
+    },
+    {
+      "username": "iranfiverr",
+      "title": "کانال تلگرام فریلنسری فایور",
+      "url": "https://t.me/s/iranfiverr",
+      "type": "education",
+      "subscribers_seen": "حدود ۲٫۳ هزار",
+      "last_seen_activity": "به‌روزرسانی ۱۷ ژوئیه ۲۰۲۶ در فهرست مرجع",
+      "status": "likely_active",
+      "scan_enabled": false,
+      "note": "آموزش فایور است، فید پروژه ندارد"
+    }
+  ],
+  "directories_to_recheck": [
+    {
+      "name": "iranich.com — لیست کانال‌های تلگرام پروژه",
+      "url": "https://iranich.com/%DA%A9%D8%A7%D9%86%D8%A7%D9%84-%D8%AA%D9%84%DA%AF%D8%B1%D8%A7%D9%85/%D9%BE%D8%B1%D9%88%DA%98%D9%87",
+      "note": "فهرستی از چند کانال با تاریخ‌های قدیمی؛ تک‌تک آیدی‌ها باید دوباره بررسی شوند"
+    },
+    {
+      "name": "telegramcanal.ir — فریلنسر|سفارش پروژه",
+      "url": "https://telegramcanal.ir/telegram-channel/%D9%81%D8%B1%DB%8C%D9%84%D9%86%D8%B3%D8%B1%D8%B3%D9%81%D8%A7%D8%B1%D8%B4-%D9%BE%D8%B1%D9%88%DA%98%D9%87/",
+      "note": "آخرین به‌روزرسانی در نتیجه جستجو به ۲۰۲۰ برمی‌گردد"
+    },
+    {
+      "name": "telegramchannels.me — فهرست کانال‌های فارسی فریلنسری",
+      "url": "https://telegramchannels.me/fa/channels/iranfiverr",
+      "note": "برای کشف کانال‌های بیشتر"
+    }
+  ]
+}
