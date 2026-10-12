@@ -20,3 +20,19 @@ server/scannerBridge.ts (نگاشت JSONL→فید، بودجه‌ی فارسی/
 **Verified:** npm test 19/19 (۱۲ تازه)؛ pytest 19/19 (۴ تازه)؛ tsc و vite build سالم؛ E2E با فید ساختگی: source=scanner، امتیاز/دلایل درست، trigger-scan واقعی (spawn پایتون + guard robots + خروج تمیز)، parse-file --out فید زنده را به‌روز کرد.
 **Not verified:** اسکن واقعی سایت/کانال (شبکه‌ی محیط توسعه دسترسی ندارد).
 **Status:** T-007 DONE (SPEC-007 DRAFT، نیازمند تأیید). T-004: R2/R4/R5/R6 انجام شد؛ R7 (اعلان تلگرام) باز. T-003 R5 (auth API) و T-005 (SQLite/نرخ برد) همچنان باز.
+## 2026-10-12 · session-005 · arena/bb8cb4b4-konklancer
+**Did:** دامنه از «فقط کدنویسی/ربات» به «هر چیزی که AI می‌تواند تولید کند» باز شد و اسکنر واقعی شد:
+shared/taxonomy.json (۱۲ دسته + سایر، کلیدواژه‌ی قوی با وزن ۸) و آینه‌های آن shared/taxonomy.ts و scanner/taxonomy.py؛
+scanner/autoparse.py (کشف خودکار ساختار: هم‌امضا + هم‌فرند، :nth-of-type برای تفکیک ستون، نرمال‌سازی ارقام فارسی)؛
+دستورهای تازه‌ی probe / autodetect / autoscan و --categories و --html در konklancer_scan.py؛
+نامزد انتخابگر از کد عمومی reARBitRA/all-them-bots در platforms.json (تأییدنشده)؛
+scannerBridge (categorize با تاکسونومی، امتیاز خنثی + تناسب دسته، matchesFilters با دسته‌ی صریح، scan --auto در args)؛
+server.ts (/api/jobs با categoryFilter، status با categories، categorizeJobServer با prompt تاکسونومی)؛
+UI (پیل‌های دسته از تاکسونومی، چیپ دسته روی کارت، geminiCategorizer با کلیدهای مشترک)؛
+docs و .env.example و SPEC-007 (R16–R23، AC-8..AC-12).
+**Verified:** pytest 33/33 (۱۴ تازه: autoparse + taxonomy)؛ npm test 24/24 (۵ تازه)؛ tsc و vite build سالم؛
+E2E آفلاین با دو صفحه‌ی آزمایشی (کارت‌های RTL و جدول با کلاس‌های odd/even): کشف خودکار درست، بودجه/پیشنهاد/زمان درست،
+صفحه‌ی JS-محور صفر مورد با پیام روشن، و فید خروجی دسته‌ی درست برای ترجمه/گرافیک/اسناد/ویدیو/صدا/تصویر/وب.
+**Not verified:** هیچ سایت واقعی از این محیط قابل دسترسی نیست (TCP به پارس‌کدرز/پونیشا/کارلنسر/t.me بسته است)؛
+نامزدهای انتخابگر و مقدار `aiFit` روی HTML زنده تأیید نشده‌اند؛ Playwright پیاده نشده.
+**Status:** T-007 DOING→DONE (SPEC-007 هنوز DRAFT). T-003 R5 (auth API) و T-005 (SQLite) باز.

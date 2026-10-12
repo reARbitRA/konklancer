@@ -56,10 +56,20 @@ npm start                        # http://localhost:3000
 **[docs/PERSONAL-SETUP.md](docs/PERSONAL-SETUP.md)**.
 
 ```bash
-python -m scanner.konklancer_scan list                       # چه چیزی اسکن‌شدنی است؟
-python -m scanner.konklancer_scan enable --telegram workarc  # سریع‌ترین منبع: کانال عمومی تلگرام
-# .env → KONKLANCER_SCAN_TELEGRAM="1"   سپس دکمه‌ی «اسکن زنده» در UI
+python -m scanner.konklancer_scan list                            # چه چیزی اسکن‌شدنی است + فهرست دسته‌ها
+python -m scanner.konklancer_scan autoscan --platform parscoders,ponisha --save   # اسکن واقعی + کشف خودکار ساختار
+python -m scanner.konklancer_scan autoscan --platform ponisha --html SAVED.html   # مسیر بدون شبکه (HTML مرورگر)
+python -m scanner.konklancer_scan enable --telegram workarc       # سریع‌ترین منبع: کانال عمومی تلگرام
+# .env → KONKLANCER_SCAN_PLATFORMS="parscoders,ponisha" و/یا KONKLANCER_SCAN_TELEGRAM="1"
+# سپس دکمه‌ی «اسکن زنده» در UI
 ```
+
+### دسته‌بندی: «هر چیزی که AI می‌تواند تولید کند»
+دسته‌ها در `shared/taxonomy.json` (منبع واحد برای اسکنر، سرور و UI) تعریف شده‌اند: ترجمه، گرافیک/لوگو/بروشور،
+تصویر و روتوش، ویدیو و انیمیشن، صدا و گویندگی، اسناد و پاورپوینت، محتوا و نویسندگی، مارکتینگ و سئو،
+داده و اکسل، رابط کاربری، اتوماسیون/ربات، وب و اپلیکیشن، و «سایر». **هیچ دسته‌ای پیش‌فرض حذف نمی‌شود**:
+تا وقتی `KONKLANCER_SCAN_INCLUDE` یا `KONKLANCER_SCAN_CATEGORIES` را پر نکنید، همه‌ی پروژه‌ها (کدنویسی و
+غیرکدنویسی) خوانده و در فید نوشته می‌شوند و دسته فقط برای نمایش/فیلتر UI استفاده می‌شود.
 
 ## وضعیت پروژه و قواعد
 - هر تغییر باید به یک spec تاییدشده در `specs/` وصل باشد (ببینید `AGENTS.md`).
@@ -67,7 +77,8 @@ python -m scanner.konklancer_scan enable --telegram workarc  # سریع‌تری
 - `freelance_pro_engine.py` قدیمی است و اجرا نمی‌شود.
 
 ## محدودیت‌های فعلی
-- انتخابگر CSS هیچ پلتفرمی کالیبره نشده؛ تا آن زمان فقط کانال‌های تلگرام (یا داده‌ی محلی) اسکن می‌شوند (SPEC-004 R3).
+- «نامزدهای» انتخابگر سه پلتفرم (پارس‌کدرز/پونیشا/کارلنسر) از کد عمومی یک مخزن دیگر گرفته شده و **روی صفحه‌ی زنده تأیید نشده‌اند**؛ با `probe`/`autoscan` روی کامپیوتر خودتان تأیید یا جایگزین می‌شوند (SPEC-004 R3).
+- سایت‌های JS-محور یا ضدربات (احتمالاً کارلنسر) با `autoscan` خالی برمی‌گردند؛ Playwright پیاده نشده و مسیر جایگزین، ذخیره‌ی صفحه در مرورگر و `autoscan --html` است.
 - احراز هویت برای `/api/*` هنوز اضافه نشده (SPEC-003 R5).
 - پیش‌فیلتر قانون‌محور قبل از تماس AI هنوز نیست (SPEC-004 R5).
 - ذخیره‌سازی داده در مرورگر (localStorage) است؛ SQLite هنوز نیست.

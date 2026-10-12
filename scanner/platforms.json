@@ -12,13 +12,22 @@
       "hijacked": "دامنه به سایت تبلیغاتی یا قمار هدایت می‌شود؛ هرگز بازدید نشود",
       "unreachable": "در دسترس نبود",
       "inactive": "منابع معتبر تعطیلی یا رها شدن را نشان می‌دهند"
-    }
+    },
+    "coverage": "همه‌ی دسته‌های قابل تولید با AI (ترجمه، گرافیک/لوگو/بروشور، محتوا، ویدیو، صدا، اسناد، مارکتینگ، داده، اتوماسیون، وب) — فهرست کامل در shared/taxonomy.json. فیلتر دسته‌ای پیش‌فرض ندارد.",
+    "selector_candidates_source": "زنجیره‌های نامزد انتخابگر از کد عمومی مخزن reARBitRA/all-them-bots (src/autofreelance/platforms/{parscoders,karlancer,ponisha}.py) گرفته شده و **تأییدنشده**اند. با `probe --platform X` یا `autoscan --platform X` روی صفحه‌ی زنده تأیید یا جایگزین شوند.",
+    "calibration_commands": [
+      "python -m scanner.konklancer_scan probe --platform parscoders --save",
+      "python -m scanner.konklancer_scan autoscan --platform parscoders,ponisha,karlancer --save",
+      "python -m scanner.konklancer_scan autodetect --platform ponisha --html SAVED.html --save"
+    ]
   },
   "platforms": [
     {
       "id": "ponisha",
       "name": "پونیشا",
-      "aliases": ["Ponisha"],
+      "aliases": [
+        "Ponisha"
+      ],
       "domain": "ponisha.ir",
       "status": "active",
       "commission_freelancer": "۱۰٪ (برنزی)، ۸٪ (نقره‌ای)، ۷٪ (طلایی) — تعرفه رسمی",
@@ -26,12 +35,195 @@
       "listing_url": "https://ponisha.ir/search/projects",
       "robots": "ponisha.ir/robots.txt پاسخ ۴۰۴ داد؛ قبل از فعال‌سازی دوباره بررسی شود",
       "scan_enabled": false,
-      "sources": ["https://ponisha.ir/pricing/freelancers", "https://www.zoomit.ir/tech-iran/426541-ponisha-annual-report/"]
+      "sources": [
+        "https://ponisha.ir/pricing/freelancers",
+        "https://www.zoomit.ir/tech-iran/426541-ponisha-annual-report/"
+      ],
+      "listing_url_candidates": [
+        "https://ponisha.ir/projects",
+        "https://ponisha.ir/search/projects"
+      ],
+      "scan_selectors_candidates": [
+        {
+          "label": "data-testid (از کد عمومی)",
+          "verified": false,
+          "selectors": {
+            "item": "[data-testid='project-card']",
+            "title": [
+              "a[href*='/project/']",
+              "a[href*='/projects/']",
+              ".project-title",
+              "[data-testid='project-title']",
+              "h2",
+              "h3",
+              "a[href]"
+            ],
+            "link": [
+              "a[href*='/project/']",
+              "a[href*='/projects/']",
+              "a[href]"
+            ],
+            "budget": [
+              "[data-testid='project-budget']",
+              ".project-budget",
+              ".budget",
+              ".price",
+              ".amount"
+            ],
+            "bids": [
+              ".project-bids",
+              ".bids",
+              ".proposals",
+              ".bid-count",
+              "[data-testid='project-bids']"
+            ],
+            "posted": [
+              "[data-testid='project-status']",
+              ".project-status",
+              ".status",
+              ".date",
+              "time"
+            ]
+          }
+        },
+        {
+          "label": ".project-card",
+          "verified": false,
+          "selectors": {
+            "item": ".project-card",
+            "title": [
+              "a[href*='/project/']",
+              "a[href*='/projects/']",
+              ".project-title",
+              "[data-testid='project-title']",
+              "h2",
+              "h3",
+              "a[href]"
+            ],
+            "link": [
+              "a[href*='/project/']",
+              "a[href*='/projects/']",
+              "a[href]"
+            ],
+            "budget": [
+              "[data-testid='project-budget']",
+              ".project-budget",
+              ".budget",
+              ".price",
+              ".amount"
+            ],
+            "bids": [
+              ".project-bids",
+              ".bids",
+              ".proposals",
+              ".bid-count",
+              "[data-testid='project-bids']"
+            ],
+            "posted": [
+              "[data-testid='project-status']",
+              ".project-status",
+              ".status",
+              ".date",
+              "time"
+            ]
+          }
+        },
+        {
+          "label": "article.project",
+          "verified": false,
+          "selectors": {
+            "item": "article.project",
+            "title": [
+              "a[href*='/project/']",
+              "a[href*='/projects/']",
+              ".project-title",
+              "[data-testid='project-title']",
+              "h2",
+              "h3",
+              "a[href]"
+            ],
+            "link": [
+              "a[href*='/project/']",
+              "a[href*='/projects/']",
+              "a[href]"
+            ],
+            "budget": [
+              "[data-testid='project-budget']",
+              ".project-budget",
+              ".budget",
+              ".price",
+              ".amount"
+            ],
+            "bids": [
+              ".project-bids",
+              ".bids",
+              ".proposals",
+              ".bid-count",
+              "[data-testid='project-bids']"
+            ],
+            "posted": [
+              "[data-testid='project-status']",
+              ".project-status",
+              ".status",
+              ".date",
+              "time"
+            ]
+          }
+        },
+        {
+          "label": "article (fallback ساختاری)",
+          "verified": false,
+          "selectors": {
+            "item": "article",
+            "title": [
+              "a[href*='/project/']",
+              "a[href*='/projects/']",
+              ".project-title",
+              "[data-testid='project-title']",
+              "h2",
+              "h3",
+              "a[href]"
+            ],
+            "link": [
+              "a[href*='/project/']",
+              "a[href*='/projects/']",
+              "a[href]"
+            ],
+            "budget": [
+              "[data-testid='project-budget']",
+              ".project-budget",
+              ".budget",
+              ".price",
+              ".amount"
+            ],
+            "bids": [
+              ".project-bids",
+              ".bids",
+              ".proposals",
+              ".bid-count",
+              "[data-testid='project-bids']"
+            ],
+            "posted": [
+              "[data-testid='project-status']",
+              ".project-status",
+              ".status",
+              ".date",
+              "time"
+            ]
+          }
+        }
+      ],
+      "notes": {
+        "calibration": "انتخابگرها تأییدنشده‌اند. `probe` نامزدها را روی صفحه‌ی زنده امتحان می‌کند و `autodetect/autoscan` ساختار واقعی را از خود HTML یاد می‌گیرد؛ `scan --auto` هم در زمان اجرا خودکار کشف می‌کند. robots.txt پیش از فعال‌سازی دستی بازبینی شود."
+      }
     },
     {
       "id": "karlancer",
       "name": "کارلنسر",
-      "aliases": ["Karlancer", "کارلانسر"],
+      "aliases": [
+        "Karlancer",
+        "کارلانسر"
+      ],
       "domain": "karlancer.com",
       "status": "active",
       "commission_freelancer": "حداکثر ۱۰٪ بسته به طرح عضویت — پاسخ پشتیبانی رسمی",
@@ -39,12 +231,195 @@
       "listing_url": "https://www.karlancer.com/search",
       "robots": "/search?q=* و /api* ممنوع‌اند؛ /search بدون پارامتر در robots ممنوع نشده",
       "scan_enabled": false,
-      "sources": ["https://www.karlancer.com/blog/quality-payment-protection-karlancer/", "https://www.karlancer.com/robots.txt"]
+      "sources": [
+        "https://www.karlancer.com/blog/quality-payment-protection-karlancer/",
+        "https://www.karlancer.com/robots.txt"
+      ],
+      "listing_url_candidates": [
+        "https://www.karlancer.com/projects",
+        "https://www.karlancer.com/search"
+      ],
+      "scan_selectors_candidates": [
+        {
+          "label": "data-testid (از کد عمومی)",
+          "verified": false,
+          "selectors": {
+            "item": "[data-testid='project-card']",
+            "title": [
+              "a[href*='/project/']",
+              "a[href*='/projects/']",
+              ".project-title",
+              "[data-testid='project-title']",
+              "h2",
+              "h3",
+              "a[href]"
+            ],
+            "link": [
+              "a[href*='/project/']",
+              "a[href*='/projects/']",
+              "a[href]"
+            ],
+            "budget": [
+              "[data-testid='project-budget']",
+              ".project-budget",
+              ".budget",
+              ".price",
+              ".amount"
+            ],
+            "bids": [
+              ".project-bids",
+              ".bids",
+              ".proposals",
+              ".bid-count",
+              "[data-testid='project-bids']"
+            ],
+            "posted": [
+              "[data-testid='project-status']",
+              ".project-status",
+              ".status",
+              ".date",
+              "time"
+            ]
+          }
+        },
+        {
+          "label": ".project-card",
+          "verified": false,
+          "selectors": {
+            "item": ".project-card",
+            "title": [
+              "a[href*='/project/']",
+              "a[href*='/projects/']",
+              ".project-title",
+              "[data-testid='project-title']",
+              "h2",
+              "h3",
+              "a[href]"
+            ],
+            "link": [
+              "a[href*='/project/']",
+              "a[href*='/projects/']",
+              "a[href]"
+            ],
+            "budget": [
+              "[data-testid='project-budget']",
+              ".project-budget",
+              ".budget",
+              ".price",
+              ".amount"
+            ],
+            "bids": [
+              ".project-bids",
+              ".bids",
+              ".proposals",
+              ".bid-count",
+              "[data-testid='project-bids']"
+            ],
+            "posted": [
+              "[data-testid='project-status']",
+              ".project-status",
+              ".status",
+              ".date",
+              "time"
+            ]
+          }
+        },
+        {
+          "label": ".project-item",
+          "verified": false,
+          "selectors": {
+            "item": ".project-item",
+            "title": [
+              "a[href*='/project/']",
+              "a[href*='/projects/']",
+              ".project-title",
+              "[data-testid='project-title']",
+              "h2",
+              "h3",
+              "a[href]"
+            ],
+            "link": [
+              "a[href*='/project/']",
+              "a[href*='/projects/']",
+              "a[href]"
+            ],
+            "budget": [
+              "[data-testid='project-budget']",
+              ".project-budget",
+              ".budget",
+              ".price",
+              ".amount"
+            ],
+            "bids": [
+              ".project-bids",
+              ".bids",
+              ".proposals",
+              ".bid-count",
+              "[data-testid='project-bids']"
+            ],
+            "posted": [
+              "[data-testid='project-status']",
+              ".project-status",
+              ".status",
+              ".date",
+              "time"
+            ]
+          }
+        },
+        {
+          "label": "article (fallback ساختاری)",
+          "verified": false,
+          "selectors": {
+            "item": "article",
+            "title": [
+              "a[href*='/project/']",
+              "a[href*='/projects/']",
+              ".project-title",
+              "[data-testid='project-title']",
+              "h2",
+              "h3",
+              "a[href]"
+            ],
+            "link": [
+              "a[href*='/project/']",
+              "a[href*='/projects/']",
+              "a[href]"
+            ],
+            "budget": [
+              "[data-testid='project-budget']",
+              ".project-budget",
+              ".budget",
+              ".price",
+              ".amount"
+            ],
+            "bids": [
+              ".project-bids",
+              ".bids",
+              ".proposals",
+              ".bid-count",
+              "[data-testid='project-bids']"
+            ],
+            "posted": [
+              "[data-testid='project-status']",
+              ".project-status",
+              ".status",
+              ".date",
+              "time"
+            ]
+          }
+        }
+      ],
+      "notes": {
+        "calibration": "انتخابگرها تأییدنشده‌اند. `probe` نامزدها را روی صفحه‌ی زنده امتحان می‌کند و `autodetect/autoscan` ساختار واقعی را از خود HTML یاد می‌گیرد؛ `scan --auto` هم در زمان اجرا خودکار کشف می‌کند. robots.txt پیش از فعال‌سازی دستی بازبینی شود."
+      }
     },
     {
       "id": "parscoders",
       "name": "پارس‌کدرز",
-      "aliases": ["ParsCoders", "پارسکدرز"],
+      "aliases": [
+        "ParsCoders",
+        "پارسکدرز"
+      ],
       "domain": "parscoders.com",
       "status": "active",
       "commission_freelancer": "۱۵٪ (رایگان و برنزی)، ۱۰٪ (نقره‌ای و طلایی)، حداقل ۱۵۰۰ تومان — تعرفه رسمی",
@@ -52,12 +427,238 @@
       "listing_url": "https://parscoders.com/project/only-available/{page}",
       "robots": "/api/، /dashboard/، /anonymous-project/ ممنوع‌اند؛ مسیر /project/ ممنوع نشده",
       "scan_enabled": false,
-      "sources": ["https://parscoders.com/pricing", "https://parscoders.com/tos", "https://parscoders.com/robots.txt"]
+      "sources": [
+        "https://parscoders.com/pricing",
+        "https://parscoders.com/tos",
+        "https://parscoders.com/robots.txt"
+      ],
+      "listing_url_candidates": [
+        "https://parscoders.com/projects",
+        "https://parscoders.com/project/only-available"
+      ],
+      "scan_selectors_candidates": [
+        {
+          "label": "data-testid (از کد عمومی)",
+          "verified": false,
+          "selectors": {
+            "item": "[data-testid='project-card']",
+            "title": [
+              "a[href*='/project/']",
+              "a[href*='/projects/']",
+              ".project-title",
+              "[data-testid='project-title']",
+              "h2",
+              "h3",
+              "a[href]"
+            ],
+            "link": [
+              "a[href*='/project/']",
+              "a[href*='/projects/']",
+              "a[href]"
+            ],
+            "budget": [
+              "[data-testid='project-budget']",
+              ".project-budget",
+              ".budget",
+              ".price",
+              ".amount"
+            ],
+            "bids": [
+              ".project-bids",
+              ".bids",
+              ".proposals",
+              ".bid-count",
+              "[data-testid='project-bids']"
+            ],
+            "posted": [
+              "[data-testid='project-status']",
+              ".project-status",
+              ".status",
+              ".date",
+              "time"
+            ]
+          }
+        },
+        {
+          "label": ".project-card",
+          "verified": false,
+          "selectors": {
+            "item": ".project-card",
+            "title": [
+              "a[href*='/project/']",
+              "a[href*='/projects/']",
+              ".project-title",
+              "[data-testid='project-title']",
+              "h2",
+              "h3",
+              "a[href]"
+            ],
+            "link": [
+              "a[href*='/project/']",
+              "a[href*='/projects/']",
+              "a[href]"
+            ],
+            "budget": [
+              "[data-testid='project-budget']",
+              ".project-budget",
+              ".budget",
+              ".price",
+              ".amount"
+            ],
+            "bids": [
+              ".project-bids",
+              ".bids",
+              ".proposals",
+              ".bid-count",
+              "[data-testid='project-bids']"
+            ],
+            "posted": [
+              "[data-testid='project-status']",
+              ".project-status",
+              ".status",
+              ".date",
+              "time"
+            ]
+          }
+        },
+        {
+          "label": ".project-item",
+          "verified": false,
+          "selectors": {
+            "item": ".project-item",
+            "title": [
+              "a[href*='/project/']",
+              "a[href*='/projects/']",
+              ".project-title",
+              "[data-testid='project-title']",
+              "h2",
+              "h3",
+              "a[href]"
+            ],
+            "link": [
+              "a[href*='/project/']",
+              "a[href*='/projects/']",
+              "a[href]"
+            ],
+            "budget": [
+              "[data-testid='project-budget']",
+              ".project-budget",
+              ".budget",
+              ".price",
+              ".amount"
+            ],
+            "bids": [
+              ".project-bids",
+              ".bids",
+              ".proposals",
+              ".bid-count",
+              "[data-testid='project-bids']"
+            ],
+            "posted": [
+              "[data-testid='project-status']",
+              ".project-status",
+              ".status",
+              ".date",
+              "time"
+            ]
+          }
+        },
+        {
+          "label": ".project-list-item",
+          "verified": false,
+          "selectors": {
+            "item": ".project-list-item",
+            "title": [
+              "a[href*='/project/']",
+              "a[href*='/projects/']",
+              ".project-title",
+              "[data-testid='project-title']",
+              "h2",
+              "h3",
+              "a[href]"
+            ],
+            "link": [
+              "a[href*='/project/']",
+              "a[href*='/projects/']",
+              "a[href]"
+            ],
+            "budget": [
+              "[data-testid='project-budget']",
+              ".project-budget",
+              ".budget",
+              ".price",
+              ".amount"
+            ],
+            "bids": [
+              ".project-bids",
+              ".bids",
+              ".proposals",
+              ".bid-count",
+              "[data-testid='project-bids']"
+            ],
+            "posted": [
+              "[data-testid='project-status']",
+              ".project-status",
+              ".status",
+              ".date",
+              "time"
+            ]
+          }
+        },
+        {
+          "label": "article (fallback ساختاری)",
+          "verified": false,
+          "selectors": {
+            "item": "article",
+            "title": [
+              "a[href*='/project/']",
+              "a[href*='/projects/']",
+              ".project-title",
+              "[data-testid='project-title']",
+              "h2",
+              "h3",
+              "a[href]"
+            ],
+            "link": [
+              "a[href*='/project/']",
+              "a[href*='/projects/']",
+              "a[href]"
+            ],
+            "budget": [
+              "[data-testid='project-budget']",
+              ".project-budget",
+              ".budget",
+              ".price",
+              ".amount"
+            ],
+            "bids": [
+              ".project-bids",
+              ".bids",
+              ".proposals",
+              ".bid-count",
+              "[data-testid='project-bids']"
+            ],
+            "posted": [
+              "[data-testid='project-status']",
+              ".project-status",
+              ".status",
+              ".date",
+              "time"
+            ]
+          }
+        }
+      ],
+      "notes": {
+        "calibration": "انتخابگرها تأییدنشده‌اند. `probe` نامزدها را روی صفحه‌ی زنده امتحان می‌کند و `autodetect/autoscan` ساختار واقعی را از خود HTML یاد می‌گیرد؛ `scan --auto` هم در زمان اجرا خودکار کشف می‌کند. robots.txt پیش از فعال‌سازی دستی بازبینی شود."
+      }
     },
     {
       "id": "typeiran",
       "name": "تایپیران",
-      "aliases": ["TypeIran", "تایپ‌ایران"],
+      "aliases": [
+        "TypeIran",
+        "تایپ‌ایران"
+      ],
       "domain": "typeiran.com",
       "status": "active",
       "commission_freelancer": "۸ تا ۱۵٪ بسته به نوع حساب — منبع ثانویه، در صفحه رسمی جزئیات نیامده",
@@ -65,12 +666,17 @@
       "listing_url": null,
       "robots": "بررسی نشده",
       "scan_enabled": false,
-      "sources": ["https://typeiran.com", "https://typeiran.com/pricing"]
+      "sources": [
+        "https://typeiran.com",
+        "https://typeiran.com/pricing"
+      ]
     },
     {
       "id": "bitjob",
       "name": "بیت‌جاب",
-      "aliases": ["BitJob"],
+      "aliases": [
+        "BitJob"
+      ],
       "domain": "bitjob.ir",
       "status": "active",
       "commission_freelancer": "نامشخص؛ منابع متناقض (۱۰٪ در یک منبع، ۱۵٪ در منبع دیگر)",
@@ -78,12 +684,21 @@
       "listing_url": "https://www.bitjob.ir/project/list",
       "robots": "فقط /home/jsdisabled، /identity/account/*، /dashboard/*، /suggests، /credit ممنوع‌اند",
       "scan_enabled": false,
-      "sources": ["https://www.bitjob.ir/", "https://www.bitjob.ir/robots.txt", "https://www.bitjob.ir/home/pricing"]
+      "sources": [
+        "https://www.bitjob.ir/",
+        "https://www.bitjob.ir/robots.txt",
+        "https://www.bitjob.ir/home/pricing"
+      ]
     },
     {
       "id": "lancerify",
       "name": "لنسریفای (همان پارس فریلنسر)",
-      "aliases": ["Lancerify", "پارس فریلنسر", "ParsFreelancer", "parsfl.ir"],
+      "aliases": [
+        "Lancerify",
+        "پارس فریلنسر",
+        "ParsFreelancer",
+        "parsfl.ir"
+      ],
       "domain": "lancerify.com",
       "status": "active_flagged",
       "commission_freelancer": "نامشخص",
@@ -92,12 +707,17 @@
       "robots": "بررسی نشده",
       "scan_enabled": false,
       "policy_note": "در صفحه اصلی آگهی «مدارک فیک احراز هویت» و «کارت اقامت ترکیه جهت احراز هویت» دیده شد. تا بررسی دستی، اسکن و هر تعاملی غیرفعال است. parsfl.ir به lancerify.com هدایت می‌شود.",
-      "sources": ["https://lancerify.com/", "https://blog.lancerify.com/"]
+      "sources": [
+        "https://lancerify.com/",
+        "https://blog.lancerify.com/"
+      ]
     },
     {
       "id": "anjammidam",
       "name": "انجام میدم",
-      "aliases": ["AnjamMidam"],
+      "aliases": [
+        "AnjamMidam"
+      ],
       "domain": "anjammidam.com",
       "status": "unverified",
       "commission_freelancer": "۲۰٪ در منابع قدیمی",
@@ -106,12 +726,17 @@
       "robots": "بررسی نشده",
       "scan_enabled": false,
       "policy_note": "اخبار معتبر تعطیلی تا پایان ۱۴۰۱ را گزارش کرده‌اند، اما anjammidam.com اکنون صفحه بازار فعال نشان می‌دهد. مالک فعلی مشخص نیست.",
-      "sources": ["https://www.fardayeeghtesad.com/news/6751/", "https://anjammidam.com/"]
+      "sources": [
+        "https://www.fardayeeghtesad.com/news/6751/",
+        "https://anjammidam.com/"
+      ]
     },
     {
       "id": "suntype",
       "name": "سان‌تایپ",
-      "aliases": ["SunType"],
+      "aliases": [
+        "SunType"
+      ],
       "domain": "suntype.ir",
       "status": "agency",
       "commission_freelancer": "—",
@@ -120,12 +745,16 @@
       "robots": "—",
       "scan_enabled": false,
       "policy_note": "آژانس خدمات دانشجویی است؛ بازار آزاد پروژه ندارد.",
-      "sources": ["https://suntype.ir/"]
+      "sources": [
+        "https://suntype.ir/"
+      ]
     },
     {
       "id": "zhaket_service",
       "name": "ژاکت سرویس",
-      "aliases": ["Zhaket Service"],
+      "aliases": [
+        "Zhaket Service"
+      ],
       "domain": "zhaket.com",
       "status": "unverified",
       "commission_freelancer": "نامشخص",
@@ -134,12 +763,16 @@
       "robots": "—",
       "scan_enabled": false,
       "policy_note": "صفحه /service در فهرست قبلی خطای ۴۰۴ داد.",
-      "sources": ["https://www.zhaket.com/service"]
+      "sources": [
+        "https://www.zhaket.com/service"
+      ]
     },
     {
       "id": "doorkar",
       "name": "دورکار",
-      "aliases": ["Doorkar"],
+      "aliases": [
+        "Doorkar"
+      ],
       "domain": "doorkar.com",
       "status": "for_sale",
       "commission_freelancer": "ادعای کمیسیون صفر (منبع قدیمی)",
@@ -147,12 +780,16 @@
       "listing_url": null,
       "robots": "—",
       "scan_enabled": false,
-      "sources": ["https://www.hugedomains.com/domain_profile.cfm?d=doorkar.com"]
+      "sources": [
+        "https://www.hugedomains.com/domain_profile.cfm?d=doorkar.com"
+      ]
     },
     {
       "id": "karishe",
       "name": "کاریشه",
-      "aliases": ["Karishe"],
+      "aliases": [
+        "Karishe"
+      ],
       "domain": "karishe.com",
       "status": "hijacked",
       "commission_freelancer": "—",
@@ -166,7 +803,9 @@
     {
       "id": "hamiworks",
       "name": "حامی‌ورکس (در فهرست اولیه نبود)",
-      "aliases": ["Hamiworks"],
+      "aliases": [
+        "Hamiworks"
+      ],
       "domain": "hamiworks.com",
       "status": "hijacked",
       "commission_freelancer": "ادعای کمیسیون صفر (منبع ۲۰۲۱)",
@@ -180,7 +819,9 @@
     {
       "id": "iranfreelancer",
       "name": "ایران فریلنسر",
-      "aliases": ["IranFreelancer"],
+      "aliases": [
+        "IranFreelancer"
+      ],
       "domain": "iranfreelancer.com",
       "status": "pre_launch",
       "commission_freelancer": "—",
@@ -188,12 +829,17 @@
       "listing_url": null,
       "robots": "—",
       "scan_enabled": false,
-      "sources": ["https://iranfreelancer.com/"]
+      "sources": [
+        "https://iranfreelancer.com/"
+      ]
     },
     {
       "id": "karito",
       "name": "کاریتو",
-      "aliases": ["Karito", "karito.ir"],
+      "aliases": [
+        "Karito",
+        "karito.ir"
+      ],
       "domain": "karito.ir",
       "status": "unreachable",
       "commission_freelancer": "—",
@@ -206,7 +852,9 @@
     {
       "id": "workfa",
       "name": "ورکفا",
-      "aliases": ["Workfa"],
+      "aliases": [
+        "Workfa"
+      ],
       "domain": "workfa.com",
       "status": "unverified",
       "commission_freelancer": "—",
@@ -219,7 +867,9 @@
     {
       "id": "wishwork",
       "name": "ویش‌ورک",
-      "aliases": ["Wish Work"],
+      "aliases": [
+        "Wish Work"
+      ],
       "domain": "wishwork.ir",
       "status": "unverified",
       "commission_freelancer": "—",
@@ -232,7 +882,9 @@
     {
       "id": "gooyandegan",
       "name": "گویندگان",
-      "aliases": ["Gooyandegan"],
+      "aliases": [
+        "Gooyandegan"
+      ],
       "domain": null,
       "status": "inactive",
       "commission_freelancer": "—",

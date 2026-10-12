@@ -16,6 +16,8 @@ import path from 'path';
 // ---------------------------------------------------------------------------
 // مدل داده
 // ---------------------------------------------------------------------------
+import { ALL_CATEGORIES, CATEGORY_KEYS, categoryAiFit, categoryLabel, detectCategory } from '../shared/taxonomy';
+
 export interface ScannedProject {
   id: string;
   source: string;
@@ -25,11 +27,14 @@ export interface ScannedProject {
   budget_text?: string;
   bids_text?: string;
   posted_text?: string;
+  /** کلید دسته از shared/taxonomy.json؛ اسکنر آن را روی هر رکورد می‌نویسد. */
+  category?: string;
   scraped_at?: string;
 }
 
 export type FeedPlatformKey = 'ponisha' | 'karlancer' | 'parskoders' | 'global';
-export type FeedCategoryKey = 'scraping' | 'telegram' | 'data' | 'api' | 'automation';
+// کلید دسته = کلیدهای shared/taxonomy.json (ترجمه، گرافیک، ویدیو، صدا، کدنویسی و ...)
+export type FeedCategoryKey = string;
 
 export interface FeedJob {
   id: string;
@@ -146,23 +151,30 @@ export function platformOf(source: string): { key: FeedPlatformKey; label: strin
   return { key, label: PLATFORM_LABELS[source] ?? source };
 }
 
-export function categorize(title: string, summary = ''): { key: FeedCategoryKey; label: string } {
-  const text = `${title} ${summary}`.toLowerCase();
-  if (/telegram|تلگرام|bot|ربات/.test(text)) return { key: 'telegram', label: 'ربات تلگرام / پایتون' };
-  if (/scrap|اسکرپ|کرال|crawl|selenium|playwright|استخراج|جمع آوری/.test(text))
-    return { key: 'scraping', label: 'وب اسکرپینگ / پایتون' };
-  if (/api|وب‌سرویس|وب سرویس|webhook|وب‌هوک|endpoint|بک‌اند|backend/.test(text))
-    return { key: 'api', label: 'توسعه API / بک‌اند' };
-  if (/داده|data|اکسل|excel|pandas|پایگاه داده|sql|هوش مصنوعی|ai|مدل/.test(text))
-    return { key: 'data', label: 'داده و هوش مصنوعی' };
-  return { key: 'automation', label: 'اتوماسیون / اسکریپت' };
+/**
+ * دسته‌ی پروژه = همان دسته‌بندی مشترک (shared/taxonomy.json).
+ * قبلاً اینجا فقط پنج دسته‌ی کدنویسی وجود داشت و کارهای ترجمه/طراحی/گرافیک درست دسته‌بندی نمی‌شدند.
+ */
+export function categorize(title: string, summary = ''): { key: FeedCategoryKey; label: string; aiFit: number } {
+  const category = detectCategory(title, summary);
+  return { key: category.key, label: category.fa, aiFit: category.aiFit };
 }
+
+/** آیا این کلید، یکی از دسته‌های رسمی تاکسونومی است؟ */
+export const isKnownCategory = (key?: string): boolean => Boolean(key) && CATEGORY_KEYS.includes(key as string);
+
+export const allCategoryKeys = (): string[] => [...CATEGORY_KEYS];
+
+export const describeCategories = (): Array<{ key: string; label: string; aiFit: number }> =>
+  ALL_CATEGORIES.map((category) => ({ key: category.key, label: categoryLabel(category.key), aiFit: categoryAiFit(category.key) }));
 
 // ---------------------------------------------------------------------------
 // امتیاز پیش‌فیلتر (SPEC-004 R5 / SPEC-006 R8)
 // ---------------------------------------------------------------------------
 export interface ScoreOptions {
   include?: string[];
+  /** محدودکردن صریح به این دسته‌ها؛ خالی یعنی همه‌ی دسته‌ها (پیش‌فرض) */
+  categories?: string[];
   now?: number;
 }
 
@@ -193,6 +205,9 @@ function postedAgeHours(posted?: string, scrapedAt?: string, now = Date.now()): 
  * امتیاز ۰ تا ۱۰۰ بر پایه‌ی بودجه، رقابت (تعداد پیشنهاد)، تازگی و هم‌پوشانی کلیدواژه.
  * این تابع عمداً هیچ تماس AI ندارد تا هم رایگان باشد و هم پیش از `callLLM` اجرا شود.
  */
+/** امتیاز خنثی وقتی کلیدواژه‌های دلخواه مطابقت ندارند (پروژه نامرتبط نیست، فقط بی‌کلیدواژه است). */
+export const NEUTRAL_KEYWORD_BONUS = 8;
+
 export function scoreProject(project: ScannedProject, options: ScoreOptions = {}) {
   const now = options.now ?? Date.now();
   const reasons: string[] = [];
@@ -246,7 +261,32 @@ export function scoreProject(project: ScannedProject, options: ScoreOptions = {}
     reasons.push(`هم‌پوشانی کلیدواژه: ${hits.join('، ')}`);
   }
 
-  return { score: Math.round(Math.min(100, score)), reasons, budget, proposals, ageHours };
+  // هیچ کلیدواژه‌ای نباید پروژه را بی‌ارزش کند: وقتی فهرست دلخواه داده شده ولی مطابقت ندارد،
+  // امتیاز خنثی داده می‌شود و پروژه حذف نمی‌شود (اسکن همه‌ی دسته‌ها، نه فقط کدنویسی).
+  const category = categorize(project.title, project.summary);
+  const explicitKeywords = keywords.length > 0;
+  if (explicitKeywords && hits.length === 0) {
+    score += NEUTRAL_KEYWORD_BONUS;
+    reasons.push('کلیدواژه‌ی دلخواه مطابقت نداشت؛ امتیاز خنثی (پروژه کنار گذاشته نمی‌شود)');
+  }
+
+  // تناسب دسته با AI: کاری که هوش مصنوعی می‌تواند تولید کند کمی جلوتر می‌افتد.
+  const fitPoints = Math.round(category.aiFit / 2);
+  if (fitPoints > 0) {
+    score += fitPoints;
+    reasons.push(`دسته: ${category.label} (تناسب با AI: ${category.aiFit}/10)`);
+  }
+
+  return {
+    score: Math.round(Math.min(100, score)),
+    reasons,
+    budget,
+    proposals,
+    ageHours,
+    categoryKey: category.key,
+    categoryLabel: category.label,
+    categoryAiFit: category.aiFit,
+  };
 }
 
 export function priorityFromScore(score: number): 'High' | 'Medium' | 'Low' {
@@ -279,18 +319,33 @@ export function readProjects(file: string): ScannedProject[] {
   return projects;
 }
 
-export function matchesFilters(project: ScannedProject, include: string[], exclude: string[]): boolean {
+export function matchesFilters(
+  project: ScannedProject,
+  include: string[],
+  exclude: string[],
+  categories: string[] = [],
+): boolean {
   const blob = `${project.title} ${project.summary ?? ''}`.toLowerCase();
   if (exclude.filter(Boolean).some((word) => blob.includes(word.toLowerCase()))) return false;
   const words = include.filter(Boolean);
   if (words.length > 0 && !words.some((word) => blob.includes(word.toLowerCase()))) return false;
+  // دسته فقط وقتی محدود می‌کند که کاربر صریحاً دسته‌ها را انتخاب کرده باشد.
+  const wanted = categories.filter(Boolean);
+  if (wanted.length > 0 && !wanted.includes(projectCategoryKey(project))) return false;
   return true;
+}
+
+/** کلید دسته‌ی پروژه: مقدار اسکنر اگر معتبر باشد، وگرنه تشخیص محلی با همان تاکسونومی. */
+export function projectCategoryKey(project: ScannedProject): string {
+  if (isKnownCategory(project.category)) return project.category as string;
+  return categorize(project.title, project.summary).key;
 }
 
 export function mapProjectToJob(project: ScannedProject, scoreOptions: ScoreOptions = {}): FeedJob {
   const { key: platformKey, label: platform } = platformOf(project.source);
   const { score, reasons, budget, proposals } = scoreProject(project, scoreOptions);
   const category = categorize(project.title, project.summary);
+  const categoryKey = projectCategoryKey(project);
   const summary = (project.summary ?? '').trim();
   const description = summary || project.title;
   const tags = new Set<string>([category.key]);
@@ -313,8 +368,8 @@ export function mapProjectToJob(project: ScannedProject, scoreOptions: ScoreOpti
     budgetFormatted: formatToman(budget),
     deadline: 'نامشخص',
     postedTime: project.posted_text?.trim() || 'تازه اسکن‌شده',
-    category: category.label,
-    categoryKey: category.key,
+    category: categoryLabel(categoryKey),
+    categoryKey,
     tags: [...tags],
     description,
     proposalsCount: proposals,
@@ -334,16 +389,18 @@ export interface FeedOptions extends ScoreOptions {
   minScore?: number;
   exclude?: string[];
   include?: string[];
+  categories?: string[];
 }
 
 export function buildFeed(projects: ScannedProject[], options: FeedOptions = {}) {
   const include = options.include ?? [];
   const exclude = options.exclude ?? [];
+  const categories = options.categories ?? [];
   const minScore = options.minScore ?? 0;
 
   const jobs = projects
-    .filter((p) => matchesFilters(p, include, exclude))
-    .map((p) => mapProjectToJob(p, { include, now: options.now }))
+    .filter((p) => matchesFilters(p, include, exclude, categories))
+    .map((p) => mapProjectToJob(p, { include, categories, now: options.now }))
     .filter((job) => job.score >= minScore)
     .sort((a, b) => b.score - a.score || (b.scrapedAt || '').localeCompare(a.scrapedAt || ''));
 
@@ -360,13 +417,21 @@ export function readScanTargets(cwd = process.cwd()): ScanTarget[] {
   try {
     const registry = JSON.parse(fs.readFileSync(path.join(cwd, 'scanner', 'platforms.json'), 'utf8'));
     for (const platform of registry.platforms ?? []) {
-      const ready = Boolean(platform.scan_enabled) && Boolean(platform.scan_selectors);
+      const hasSelectors = Boolean(platform.scan_selectors);
+      const hasCandidates = Boolean(platform.listing_url_candidates?.length) || hasSelectors;
+      const ready = Boolean(platform.scan_enabled) && hasCandidates;
+      // دلیل غیرفعال بودن باید قابل‌اقدام باشد، نه یک پیام کلی.
+      const reason = ready
+        ? undefined
+        : !platform.scan_enabled
+          ? `scan_enabled=false؛ با enable --platform ${platform.id} فعال کنید`
+          : `نشانی/انتخابگر ثبت نشده؛ با autodetect --platform ${platform.id} --save کالیبره کنید`;
       targets.push({
         id: platform.id,
         name: platform.name ?? platform.id,
         kind: 'platform',
         enabled: ready,
-        reason: ready ? undefined : 'انتخابگرهای CSS ثبت نشده یا scan_enabled=false',
+        reason,
       });
     }
   } catch {
@@ -400,6 +465,10 @@ export interface ScanConfig {
   delay: number;
   include: string[];
   exclude: string[];
+  /** دسته‌های مجاز؛ خالی یعنی همه (پیش‌فرض) */
+  categories: string[];
+  /** کالیبراسیون خودکار ساختار صفحه در زمان اسکن (`scan --auto`) */
+  autoCalibrate: boolean;
   minScore: number;
   outFile: string;
   intervalMinutes: number;
@@ -434,6 +503,8 @@ export function readScanConfig(env: NodeJS.ProcessEnv = process.env, cwd = proce
     delay: Number(env.KONKLANCER_SCAN_DELAY) || 8,
     include: csv(env.KONKLANCER_SCAN_INCLUDE),
     exclude: csv(env.KONKLANCER_SCAN_EXCLUDE),
+    categories: csv(env.KONKLANCER_SCAN_CATEGORIES),
+    autoCalibrate: env.KONKLANCER_SCAN_AUTO !== '0',
     minScore: Number(env.KONKLANCER_SCAN_MIN_SCORE) || 0,
     outFile: (env.KONKLANCER_PROJECTS_FILE || '').trim() || defaultFeedFile(cwd),
     intervalMinutes: Number(env.KONKLANCER_SCAN_INTERVAL_MIN) || 0,
@@ -451,6 +522,9 @@ export function buildScanArgs(config: ScanConfig): string[] {
   args.push('--delay', String(config.delay));
   if (config.include.length) args.push('--include', config.include.join(','));
   if (config.exclude.length) args.push('--exclude', config.exclude.join(','));
+  if (config.categories?.length) args.push('--categories', config.categories.join(','));
+  // بدون --auto، پلتفرم‌های بدون انتخابگر هیچ‌وقت پروژه‌ای برنمی‌گردانند؛ پیش‌فرض روشن است.
+  if (config.autoCalibrate !== false) args.push('--auto');
   args.push('--out', config.outFile);
   return args;
 }

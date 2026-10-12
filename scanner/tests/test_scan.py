@@ -203,7 +203,7 @@ def test_list_shows_platforms_and_channels(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(ks, "TELEGRAM_PATH", _write_channels(tmp_path))
     assert ks.main(["list"]) == 0
     out = capsys.readouterr().out
-    assert "پارس‌کدرز" in out and "@workarc" in out and "انتخابگر CSS ثبت نشده" in out
+    assert "پارس‌کدرز" in out and "@workarc" in out and "بدون نامزد" in out
 
 
 def test_parse_file_can_append_to_the_feed(tmp_path, capsys):
@@ -273,3 +273,35 @@ def test_robots_disallow_reason_is_reported():
             assert "ممنوع کرده است" in str(exc)
         else:
             raise AssertionError("باید متوقف می‌شد")
+
+
+def test_same_domain_ignores_port_and_www():
+    """رگرسیون باگ واقعی: ریدایرکت همان میزبان با پورت دیگر «دامنه‌ی خارج» تشخیص داده می‌شد."""
+    assert ks._same_domain("127.0.0.1:8123", "127.0.0.1")
+    assert ks._same_domain("parscoders.com:443", "parscoders.com")
+    assert ks._same_domain("www.karlancer.com", "karlancer.com")
+    assert ks._same_domain("cdn.karlancer.com", "karlancer.com")
+    assert not ks._same_domain("evil.example", "karlancer.com")
+    assert not ks._same_domain("notkarlancer.com", "karlancer.com")
+    assert not ks._same_domain("", "karlancer.com")
+
+
+def test_category_is_written_into_the_feed(tmp_path):
+    """فید باید دسته‌ی هر پروژه را داشته باشد تا فیلتر دسته‌ای UI روی داده‌ی واقعی کار کند."""
+    import json as _json
+
+    out = tmp_path / "feed.jsonl"
+    selectors = {"item": ".project-card", "title": "a[href]", "link": "a[href]"}
+    rc = ks.main([
+        "parse-file",
+        "--platform", "parscoders",
+        "--html", str(FIX / "listing_sample_cards.html"),
+        "--selectors-json", _json.dumps(selectors, ensure_ascii=False),
+        "--out", str(out),
+    ])
+    assert rc == 0
+    rows = [_json.loads(line) for line in out.read_text(encoding="utf-8").splitlines() if line.strip()]
+    assert rows, "باید رکورد نوشته شود"
+    assert all(row.get("category") for row in rows)
+    keys = {row["category"] for row in rows}
+    assert {"translation", "graphic"} <= keys, keys

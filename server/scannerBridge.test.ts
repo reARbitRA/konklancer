@@ -2,12 +2,15 @@
 // Run: npm test
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+
+import { categoryLabel } from '../shared/taxonomy';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {
   buildFeed,
   buildScanArgs,
+  categorize,
   extractBudgetToman,
   extractProposalsCount,
   mapProjectToJob,
@@ -143,6 +146,8 @@ test('readScanConfig reads personal-mode settings from the environment', () => {
   assert.equal(defaults.pages, 1);
   assert.equal(defaults.delay, 8);
   assert.equal(defaults.intervalMinutes, 0);
+  assert.deepEqual(defaults.categories, []);
+  assert.equal(defaults.autoCalibrate, true, 'کالیبراسیون خودکار باید پیش‌فرض روشن باشد');
   assert.equal(defaults.outFile, path.join('/tmp/k', 'scanner', 'out', 'projects.jsonl'));
 
   const custom = readScanConfig(
@@ -153,6 +158,8 @@ test('readScanConfig reads personal-mode settings from the environment', () => {
       KONKLANCER_SCAN_PAGES: '3',
       KONKLANCER_SCAN_INCLUDE: 'پایتون,python',
       KONKLANCER_SCAN_MIN_SCORE: '60',
+      KONKLANCER_SCAN_CATEGORIES: 'translation, graphic',
+      KONKLANCER_SCAN_AUTO: '0',
       KONKLANCER_PROJECTS_FILE: '/tmp/feed.jsonl',
       KONKLANCER_SCAN_INTERVAL_MIN: '30',
     },
@@ -165,6 +172,8 @@ test('readScanConfig reads personal-mode settings from the environment', () => {
   assert.equal(custom.minScore, 60);
   assert.equal(custom.outFile, '/tmp/feed.jsonl');
   assert.equal(custom.intervalMinutes, 30);
+  assert.deepEqual(custom.categories, ['translation', 'graphic']);
+  assert.equal(custom.autoCalibrate, false);
 });
 
 test('readScanTargets reports which platforms and channels are actually scannable', () => {
@@ -176,6 +185,7 @@ test('readScanTargets reports which platforms and channels are actually scannabl
       platforms: [
         { id: 'parscoders', name: 'پارس‌کدرز', scan_enabled: true, scan_selectors: { item: '.x', title: '.y' } },
         { id: 'ponisha', name: 'پونیشا', scan_enabled: true },
+        { id: 'karlancer-cand', name: 'کارلانسر (نامزددار)', scan_enabled: true, listing_url_candidates: ['https://x.test/p'] },
         { id: 'karlancer', name: 'کارلانسر', scan_enabled: false },
       ],
     }),
@@ -189,7 +199,8 @@ test('readScanTargets reports which platforms and channels are actually scannabl
   assert.equal(targets.find((t) => t.id === 'parscoders')?.enabled, true);
   assert.equal(targets.find((t) => t.id === 'ponisha')?.enabled, false);
   assert.equal(targets.find((t) => t.id === 'telegram:workarc')?.enabled, true);
-  assert.equal(targets.find((t) => t.id === 'karlancer')?.reason, 'انتخابگرهای CSS ثبت نشده یا scan_enabled=false');
+  assert.equal(targets.find((t) => t.id === 'karlancer-cand')?.enabled, true, 'نامزد نشانی کافی است');
+  assert.match(targets.find((t) => t.id === 'karlancer')?.reason ?? '', /enable --platform karlancer/);
   assert.deepEqual(readScanTargets(path.join(dir, 'missing')).length, 0);
 });
 
@@ -202,6 +213,8 @@ test('buildScanArgs mirrors the documented scanner CLI', () => {
     delay: 8,
     include: ['پایتون'],
     exclude: [],
+    categories: [],
+    autoCalibrate: true,
     minScore: 0,
     outFile: '/tmp/out.jsonl',
     intervalMinutes: 0,
@@ -221,7 +234,87 @@ test('buildScanArgs mirrors the documented scanner CLI', () => {
     '8',
     '--include',
     'پایتون',
+    '--auto',
     '--out',
     '/tmp/out.jsonl',
   ]);
+
+  const limited = buildScanArgs({
+    python: 'python3',
+    platforms: [],
+    telegram: false,
+    pages: 1,
+    delay: 8,
+    include: [],
+    exclude: [],
+    categories: ['graphic', 'translation'],
+    autoCalibrate: false,
+    minScore: 0,
+    outFile: '/tmp/out.jsonl',
+    intervalMinutes: 0,
+    timeoutMs: 1000,
+    cwd: '/tmp',
+  });
+  assert.ok(limited.includes('--categories'));
+  assert.equal(limited[limited.indexOf('--categories') + 1], 'graphic,translation');
+  assert.ok(!limited.includes('--auto'), 'با autoCalibrate=false نباید --auto بفرستیم');
+});
+
+// ---------------------------------------------------------------------------
+// «هر چیزی که AI می‌تواند تولید کند» — نه فقط کدنویسی
+// ---------------------------------------------------------------------------
+
+const nonCoding = [
+  project({ id: 'tr', title: 'ترجمه مقاله پزشکی', summary: 'ترجمه تخصصی', budget_text: '۳ میلیون تومان' }),
+  project({ id: 'gr', title: 'طراحی لوگو و بروشور', summary: 'هویت بصری', budget_text: '۲ میلیون تومان' }),
+  project({ id: 'vo', title: 'گویندگی تیزر تبلیغاتی', summary: 'نریشن فارسی', budget_text: '۱ میلیون تومان' }),
+  project({ id: 'pp', title: 'ساخت پاورپوینت دفاع', summary: '۳۰ اسلاید', budget_text: '۸۰۰ هزار تومان' }),
+];
+
+test('non-coding projects survive the default (empty) filter', () => {
+  const feed = buildFeed(nonCoding, { minScore: 0 });
+  assert.deepEqual(feed.jobs.map((j) => j.id).sort(), ['gr', 'pp', 'tr', 'vo']);
+  for (const job of feed.jobs) {
+    assert.notEqual(job.categoryKey, '', 'هر پروژه باید دسته داشته باشد');
+    assert.notEqual(job.category, '', 'هر پروژه باید برچسب فارسی دسته داشته باشد');
+  }
+});
+
+test('categorize maps AI-deliverable work to the shared taxonomy', () => {
+  assert.equal(categorize('ترجمه مقاله انگلیسی به فارسی').key, 'translation');
+  assert.equal(categorize('طراحی لوگو و ست اداری').key, 'graphic');
+  assert.equal(categorize('روتوش عکس محصول').key, 'image');
+  assert.equal(categorize('مونتاژ ویدیو یوتیوب').key, 'video');
+  assert.equal(categorize('گویندگی تیزر تبلیغاتی').key, 'audio');
+  assert.equal(categorize('کپی‌رایتینگ صفحه فرود').key, 'writing');
+  assert.equal(categorize('ساخت پاورپوینت دفاع پایان‌نامه').key, 'docs');
+  assert.equal(categorize('تحلیل داده فروش با اکسل').key, 'data');
+  assert.equal(categorize('ربات تلگرام با پایتون').key, 'automation');
+  assert.equal(categorize('یک کار کاملاً نامشخص').key, 'other');
+});
+
+test('a keyword that matches nothing yields a neutral bonus, not exclusion', () => {
+  const scored = scoreProject(project({ title: 'طراحی بروشور', summary: 'بروشور سه لت' }), {
+    include: ['بلاک‌چین'],
+  });
+  assert.ok(scored.score > 0);
+  assert.ok(scored.reasons.some((r) => r.includes('امتیاز خنثی')));
+  assert.equal(scored.categoryKey, 'graphic');
+});
+
+test('category filter applies only when explicitly requested', () => {
+  const everything = buildFeed(nonCoding, { minScore: 0 });
+  assert.equal(everything.jobs.length, 4);
+
+  const onlyGraphics = buildFeed(nonCoding, { minScore: 0, categories: ['graphic'] });
+  assert.deepEqual(onlyGraphics.jobs.map((j) => j.id), ['gr']);
+
+  const multi = buildFeed(nonCoding, { minScore: 0, categories: ['translation', 'audio'] });
+  assert.deepEqual(multi.jobs.map((j) => j.id).sort(), ['tr', 'vo']);
+});
+
+test('scanner-provided category wins over local detection', () => {
+  const job = mapProjectToJob(project({ id: 'x', title: 'یک متن', category: 'video' }));
+  assert.equal(job.categoryKey, 'video');
+  assert.equal(job.category, categoryLabel('video'));
 });

@@ -75,7 +75,9 @@ npm start                           # http://localhost:3000
 |---|---|---|
 | `KONKLANCER_SCAN_PLATFORMS` | خالی | شناسه‌ی پلتفرم‌های کالیبره‌شده، با کاما: `parscoders,ponisha` |
 | `KONKLANCER_SCAN_TELEGRAM` | `0` | اگر `1` باشد، کانال‌هایی که `scan_enabled=true` دارند اسکن می‌شوند |
-| `KONKLANCER_SCAN_INCLUDE` / `..._EXCLUDE` | خالی | کلیدواژه‌ها با کاما (به فارسی هم می‌شود: `پایتون,python,ربات`) |
+| `KONKLANCER_SCAN_INCLUDE` / `..._EXCLUDE` | خالی | کلیدواژه‌ها با کاما (فارسی هم می‌شود). **خالی = بدون فیلتر: همه‌ی دسته‌ها اسکن می‌شوند** |
+| `KONKLANCER_SCAN_CATEGORIES` | خالی | محدودکردن به دسته‌های مشخص (`translation,graphic`). خالی = همه‌ی دسته‌ها |
+| `KONKLANCER_SCAN_AUTO` | `1` | کشف خودکار ساختار صفحه در زمان اسکن (برای اسکن فقط با انتخابگر ذخیره‌شده: `0`) |
 | `KONKLANCER_SCAN_PAGES` | `1` | تعداد صفحه‌ی فهرست هر پلتفرم |
 | `KONKLANCER_SCAN_DELAY` | `8` | فاصله‌ی ثانیه بین درخواست‌ها (قاعده‌ی ایمنی اسکنر) |
 | `KONKLANCER_SCAN_MIN_SCORE` | `0` | فقط پروژه‌های با امتیاز بزرگ‌تر از این مقدار وارد فید شوند (مثلاً `60`) |
@@ -130,28 +132,36 @@ KONKRED_API_KEY="konklancer-local"
 
 ---
 
-### الف) مسیر بی‌دردسر: صفحه را در مرورگر ذخیره کنید، همان‌جا تجزیه کنید
+### الف) مسیر بی‌دردسر: صفحه را در مرورگر ذخیره کنید، ساختار خودش کشف می‌شود
 
 این مسیر هیچ درخواست خودکاری به سایت نمی‌فرستد (خودتان صفحه را باز و ذخیره می‌کنید)، پس به robots
-یا ضدربات کاری ندارد و همیشه کار می‌کند:
+یا ضدربات کاری ندارد و همیشه کار می‌کند — و **به نوشتن انتخابگر دستی هم نیازی ندارد**:
 
 1. در مرورگر، صفحه‌ی فهرست پروژه‌ها را باز کنید (مثلاً `parscoders.com/project/only-available/1`).
 2. `Ctrl+S` → ذخیره به‌صورت «Webpage, HTML only» (مثلاً `/tmp/parscoders-1.html`).
-3. در ترمینال:
+3. در ترمینال (کشف خودکار ساختار + نوشتن در فید):
 
 ```bash
-python -m scanner.konklancer_scan parse-file --platform parscoders \
-  --html /tmp/parscoders-1.html \
-  --selectors-json '{"item":".project-row","title":".title a","budget":".budget","bids":".bids"}' \
-  --include پایتون,python \
-  --out scanner/out/projects.jsonl
+python -m scanner.konklancer_scan autoscan --platform parscoders \
+  --html /tmp/parscoders-1.html --save --out scanner/out/projects.jsonl
 ```
 
-4. در UI دکمه‌ی «اسکن زنده» را بزنید (یا صفحه را تازه کنید) — پروژه‌ها به فید اضافه شده‌اند.
+خروجی چیزی شبیه این است (امتیاز و تعداد آیتم واقعی، از خودِ فایل):
 
-> انتخابگرها (`--selectors-json`) را یک‌بار با نگاه‌کردن به ساختار همان فایل HTML در DevTools پیدا
-> کنید و بعد در `platforms.json` ذخیره کنید تا هر بار لازم نباشد بنویسید. مراحل دقیق در
-> [scanner/README.md](../scanner/README.md).
+```
+[parscoders] کشف خودکار: div.project-card (24 آیتم، امتیاز 88.1)
+[parscoders] صفحه 1: 24 پروژه
+دسته‌ها: ترجمه و ویراستاری: 5 · گرافیک، لوگو و بروشور: 4 · وب و اپلیکیشن: 6 · ...
+24 مورد خوانده شد؛ 24 پس از فیلتر؛ 24 مورد جدید در scanner/out/projects.jsonl
+```
+
+4. اول با `--save` نزنید و فقط ببینید چه چیزی کشف می‌شود؛ اگر منطقی بود با `--save` انتخابگرها را
+   در `platforms.json` ماندگار کنید (پس‌ازآن `scan`/`autoscan` بدون `--html` هم استفاده می‌کند).
+5. در UI دکمه‌ی «اسکن زنده» را بزنید (یا صفحه را تازه کنید) — پروژه‌ها به فید اضافه شده‌اند.
+
+> اگر سایت ساختار عجیبی داشت و کشف خودکار چیزی نداد، با `autodetect --html FILE` ببینید چه نامزدهایی
+> پیدا می‌شوند و اگر لازم شد انتخابگر دستی بدهید (مثل `--selectors-json` در `parse-file`).
+> مراحل دقیق در [scanner/README.md](../scanner/README.md).
 >
 > همین کار برای کانال‌های تلگرام هم هست: صفحه‌ی `https://t.me/s/<username>` را ذخیره کنید و
 > ```bash
@@ -182,37 +192,45 @@ python -m scanner.konklancer_scan enable --telegram workarc  # فعال‌کرد
 
 ---
 
-### ج) پلتفرم‌ها با اسکن خودکار (نیازمند کالیبراسیون یک‌باره)
+### ج) پلتفرم‌ها با اسکن زنده‌ی خودکار (کشف ساختار در همان لحظه)
 
-ساختار HTML هر سایت باید از روی صفحه‌ی زنده خوانده شود؛ به همین دلیل هیچ پلتفرمی از پیش فعال نیست:
-
-```bash
-python -m scanner.konklancer_scan snapshot --platform parscoders
-# فایل scanner/out/snapshots/parscoders.html ذخیره می‌شود؛ آن را باز کنید و
-# کلاس آیتم پروژه/عنوان/لینک/بودجه/تعداد پیشنهاد را پیدا کنید.
-```
-
-سپس `scan_selectors` را در `scanner/platforms.json` ثبت کنید:
-
-```json
-"scan_selectors": { "item": ".project-row", "title": ".title a", "budget": ".budget", "bids": ".bids", "posted": ".date" }
-```
-
-آفلاین تست کنید و بعد فعال کنید:
+پارس‌کدرز، پونیشا و کارلنسر از قبل «نامزد نشانی و انتخابگر» دارند (برگرفته از کد عمومی مخزن
+`reARBitRA/all-them-bots`؛ **تأییدنشده** چون ساختار واقعی باید از صفحه‌ی زنده دیده شود). مسیر
+پیشنهادی: اول کشف خودکار، بعد ماندگارکردن انتخابگر تأییدشده.
 
 ```bash
-python -m scanner.konklancer_scan parse-file --platform parscoders \
-  --html scanner/out/snapshots/parscoders.html --include پایتون,python
+# ۱) نامزدها را روی صفحه‌ی زنده امتحان کن و بهترین را ذخیره کن
+python -m scanner.konklancer_scan probe --platform parscoders --save
+
+# ۲) یا یک‌مرحله‌ای: خواندن صفحه + کشف خودکار + نوشتن در فید
+python -m scanner.konklancer_scan autoscan --platform parscoders,ponisha --pages 2 --save
+
+# ۳) یا با اسکنر سرور (همان `scan` که سرور اجرا می‌کند، با --auto پیش‌فرض)
+python -m scanner.konklancer_scan scan --platform parscoders,ponisha --pages 2 --auto
+```
+
+سپس در `.env`: `KONKLANCER_SCAN_PLATFORMS="parscoders,ponisha"`.
+
+اگر خواستید انتخابگر ثابتی داشته باشید:
+
+```bash
+python -m scanner.konklancer_scan snapshot --platform parscoders      # ذخیره‌ی صفحه برای بررسی دستی
+python -m scanner.konklancer_scan autodetect --platform parscoders --html SAVED.html --save --min-count 5
+python -m scanner.konklancer_scan parse-file --platform parscoders --html SAVED.html  # بررسی خروجی
 python -m scanner.konklancer_scan enable --platform parscoders
 ```
 
-`enable --platform` بدون انتخابگر، فعال‌سازی را رد می‌کند (تا اسکن بی‌نتیجه نداشته باشید).
-سپس در `.env`: `KONKLANCER_SCAN_PLATFORMS="parscoders"`.
+`enable --platform` فقط پلتفرمی را قبول می‌کند که یا انتخابگر ثبت‌شده دارد یا نامزد نشانی
+(تا اسکن بی‌نتیجه نداشته باشید).
 
 > پیش از فعال‌کردن هر سایت، `robots.txt` آن را خودتان بخوانید. در بررسی ۱۰ اکتبر ۲۰۲۶ پونیشا
 > `/robots.txt` را با ۴۰۴ پاسخ می‌داد (یعنی محدودیتی اعلام نشده) و کارلنسر `/api*` و `/search?q=*` را
 > منع کرده بود. اسکنر فقط `GET` می‌زند، ۸ ثانیه بین درخواست‌ها فاصله می‌گذارد و اگر صفحه به دامنه‌ی
 > دیگری ریدایرکت شود، متوقف می‌شود.
+>
+> **اگر سایت با JS رندر می‌شود یا ربات‌ها را می‌بندد** (کارلنسر شایع‌ترین گزینه است)، `autoscan` روی
+> صفحه‌ی زنده ممکن است صفر آیتم برگرداند. در آن حالت مسیر (الف) با `--html` را بروید؛ داده همان
+> صفحه‌ی واقعی است که خودتان در مرورگر دیده‌اید. Playwright هنوز پیاده نشده است.
 
 ## ۵) اجرای اسکن
 
@@ -225,9 +243,10 @@ python -m scanner.konklancer_scan enable --platform parscoders
    ```
 3. **خط فرمان (بدون اجرای UI):**
    ```bash
-   npm run scan
-   # یا مستقیم:
-   python -m scanner.konklancer_scan scan --telegram --include پایتون,python
+   npm run scan                      # همان اسکنر، با تنظیمات .env
+   # یا مستقیم (بدون فیلتر ⇒ همه‌ی دسته‌ها: ترجمه، گرافیک، ویدیو، صدا، کد، ...):
+   python -m scanner.konklancer_scan scan --platform parscoders,ponisha --pages 2 --auto
+   python -m scanner.konklancer_scan scan --telegram
    ```
 
 **اسکن خودکار دوره‌ای** (اختیاری): در `.env` مقدار `KONKLANCER_SCAN_INTERVAL_MIN=30` بگذارید؛ سرور
@@ -237,7 +256,7 @@ python -m scanner.konklancer_scan enable --platform parscoders
 **زمان‌بندی با cron** (اگر UI روشن نیست ولی می‌خواهید فید به‌روز باشد):
 
 ```cron
-*/30 * * * * cd /path/to/konklancer && /usr/bin/python3 -m scanner.konklancer_scan scan --telegram --include پایتون,python >> scanner/out/cron.log 2>&1
+*/30 * * * * cd /path/to/konklancer && /usr/bin/python3 -m scanner.konklancer_scan autoscan --platform parscoders,ponisha --pages 2 >> scanner/out/cron.log 2>&1
 ```
 
 ---
@@ -252,6 +271,11 @@ python -m scanner.konklancer_scan enable --platform parscoders
 | رقابت | تا ۲۵ | تعداد پیشنهادها؛ بدون پیشنهاد = ۲۵، بالای ۱۵ پیشنهاد = ۳ |
 | تازگی | تا ۱۵ | زیر ۶ ساعت = ۱۵ |
 | هم‌پوشانی کلیدواژه | تا ۲۰ | هر کلیدواژه‌ی `KONKLANCER_SCAN_INCLUDE` که در عنوان/خلاصه باشد |
+| تناسب دسته با AI | تا ۵ | دسته‌ی پروژه (ترجمه/گرافیک/... که AI می‌تواند تولید کند) کمی جلو می‌افتد |
+
+> **هیچ کلیدواژه‌ای پروژه را حذف نمی‌کند:** اگر `KONKLANCER_SCAN_INCLUDE` را پر کنید و پروژه‌ای با
+> کلیدواژه‌ها نخواند، امتیاز خنثی (+۸) می‌گیرد و در فید می‌ماند. حذف فقط با `..._EXCLUDE` یا
+> `..._CATEGORIES` (محدودکردن صریح) انجام می‌شود.
 
 - با `KONKLANCER_SCAN_MIN_SCORE=60` فقط پروژه‌های ارزشمند وارد فید می‌شوند (و همان‌ها بعداً به
   `analyze-job` می‌روند؛ این همان پیش‌فیلتر `SPEC-004 R5` است).
@@ -279,6 +303,10 @@ python -m scanner.konklancer_scan enable --platform parscoders
 - **دکمه‌ی «اجرای تست» در تب کدنویسی** یک لاگ نمایشی تولید می‌کند و کد را واقعاً اجرا نمی‌کند.
 - **احراز هویت روی `/api/*`** هنوز اضافه نشده؛ اگر سرور را روی شبکه/اینترنت باز می‌کنید، این کار
   را نکنید (یا خودتان یک reverse proxy با auth بگذارید).
+- **Playwright پیاده نشده است**؛ سایت‌های JS-محور (احتمالاً کارلنسر) با `autoscan` خالی می‌مانند —
+  مسیر جایگزین: ذخیره‌ی صفحه در مرورگر و `autoscan --html`.
+- **دسته‌بندی، فیلتر نیست:** دسته‌ی هر پروژه فقط برای نمایش/فیلتر UI است؛ اسکنر هیچ دسته‌ای را
+  پیش‌فرض کنار نمی‌گذارد.
 - تحلیل و پروپوزال با providerهای رایگان انجام می‌شود؛ ممکن است وقتی ظرفیت پر است پیام
   `AI_RATE_LIMITED` ببینید.
 

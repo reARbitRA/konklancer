@@ -1,10 +1,13 @@
 export type PlatformKey = 'all' | 'ponisha' | 'karlancer' | 'parskoders' | 'global';
 
-export type CategoryKey = 'all' | 'scraping' | 'telegram' | 'data' | 'api' | 'automation';
+// کلید دسته = کلیدهای shared/taxonomy.json (ترجمه، گرافیک، ویدیو، صدا، داده، کد و ...).
+// 'all' یعنی «بدون محدودیت دسته».
+export type CategoryKey = 'all' | (string & {});
 
 export type PriorityLevel = 'High' | 'Medium' | 'Low';
 
-export type JobCategoryTag = 'Frontend' | 'Backend' | 'DevOps' | 'Design';
+// برچسب دسته‌بندی؛ حالا برچسب فارسی هر دسته‌ی تاکسونومی است، نه فقط چهار تگ کدنویسی.
+export type JobCategoryTag = string;
 
 export interface FreelanceJob {
   id: string;

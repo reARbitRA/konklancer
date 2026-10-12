@@ -20,6 +20,7 @@ import { SettingsModal } from './components/SettingsModal';
 import { INITIAL_JOBS } from './data/mockJobs';
 import { FreelanceJob, AIAnalysis, ActivityLogItem, UserSettings, PriorityLevel } from './types';
 import { categorizeJobWithGemini } from './utils/geminiCategorizer';
+import { categoryLabel, detectCategory } from '../shared/taxonomy';
 import { FeedStatusBar, FeedSource } from './components/FeedStatusBar';
 
 /**
@@ -40,15 +41,17 @@ function isValidFreelanceJob(data: any): data is FreelanceJob {
 
 /** فیلدهای مشتق‌شده‌ی هر پروژه (اولویت و تگ دسته) را کامل می‌کند. */
 function enrichJob(job: FreelanceJob): FreelanceJob {
+  // دسته از تاکسونومی مشترک می‌آید (ترجمه، گرافیک، ویدیو، صدا، کد و ...) — نه فقط چهار تگ کدنویسی.
+  const categoryKey =
+    job.categoryKey && job.categoryKey !== 'all'
+      ? job.categoryKey
+      : detectCategory(job.title, job.description).key;
   return {
     ...job,
+    categoryKey,
+    category: job.category || categoryLabel(categoryKey),
     priority: job.priority || (job.budget >= 6000000 ? 'High' : job.budget >= 4000000 ? 'Medium' : 'Low'),
-    categorizedTag:
-      job.categorizedTag ||
-      (job.tags?.find((tag) => ['Frontend', 'Backend', 'DevOps', 'Design'].includes(tag)) as
-        | FreelanceJob['categorizedTag']
-        | undefined) ||
-      'Backend',
+    categorizedTag: job.categorizedTag || categoryLabel(categoryKey),
   };
 }
 
@@ -310,10 +313,16 @@ export default function App() {
         return;
       }
 
-      // Automatically categorize with Gemini API helper function upon receipt
-      let categorizedTag = incomingData.categorizedTag;
-      if (!categorizedTag) {
-        categorizedTag = await categorizeJobWithGemini(incomingData.title, incomingData.description);
+      // دسته‌بندی خودکار هنگام دریافت (تاکسونومی مشترک؛ سرور و UI یک کلید می‌دهند)
+      const categoryKey =
+        incomingData.categoryKey && incomingData.categoryKey !== 'all'
+          ? incomingData.categoryKey
+          : detectCategory(incomingData.title, incomingData.description).key;
+      let categorizedTag = incomingData.categorizedTag || categoryLabel(categoryKey);
+      if (!incomingData.categorizedTag) {
+        categorizedTag = categoryLabel(
+          await categorizeJobWithGemini(incomingData.title, incomingData.description),
+        );
       }
 
       const priority: PriorityLevel = incomingData.priority || 
@@ -321,6 +330,8 @@ export default function App() {
 
       const enrichedJob: FreelanceJob = {
         ...incomingData,
+        categoryKey,
+        category: incomingData.category || categoryLabel(categoryKey),
         categorizedTag,
         priority,
         tags: incomingData.tags.includes(categorizedTag) 
@@ -418,7 +429,9 @@ export default function App() {
               const catTag = await categorizeJobWithGemini(job.title, job.description);
               job = {
                 ...job,
-                categorizedTag: catTag,
+                categoryKey: job.categoryKey || catTag,
+                category: job.category || categoryLabel(job.categoryKey || catTag),
+                categorizedTag: categoryLabel(catTag),
                 tags: job.tags.includes(catTag) ? job.tags : [...job.tags, catTag]
               };
             }
@@ -533,15 +546,21 @@ export default function App() {
   const handleAddNewManualJob = async (newJob: Partial<FreelanceJob>) => {
     const fullJob = newJob as FreelanceJob;
     // Categorize using Gemini API upon receipt
+    const categoryKey =
+      fullJob.categoryKey && fullJob.categoryKey !== 'all'
+        ? fullJob.categoryKey
+        : detectCategory(fullJob.title, fullJob.description).key;
     const categorizedTag =
       fullJob.categorizedTag ||
-      (await categorizeJobWithGemini(fullJob.title, fullJob.description));
+      categoryLabel(await categorizeJobWithGemini(fullJob.title, fullJob.description));
     const priority: PriorityLevel =
       fullJob.priority ||
       (fullJob.budget >= 6000000 ? 'High' : fullJob.budget >= 4000000 ? 'Medium' : 'Low');
 
     const enrichedJob: FreelanceJob = {
       ...fullJob,
+      categoryKey,
+      category: fullJob.category || categoryLabel(categoryKey),
       categorizedTag,
       priority,
       tags:
