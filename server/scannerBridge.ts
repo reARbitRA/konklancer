@@ -10,6 +10,7 @@
 // هیچ ورود، POST یا دور زدن ضدربات اینجا نیست؛ فقط خواندن فایل و اجرای CLI اسکنر.
 
 import { spawn } from 'child_process';
+import { execFileSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 
@@ -575,4 +576,231 @@ export async function runScanner(config: ScanConfig): Promise<ScanRunResult> {
   } finally {
     scanning = false;
   }
+}
+
+
+// ---------------------------------------------------------------------------
+// فید ابری (اسکن روی رانرهای گیت‌هاب)
+// ---------------------------------------------------------------------------
+// چرا لازم است: محیط‌هایی مثل سندباکس/مرورگر به سایت‌های فریلنسری دسترسی TCP ندارند.
+// ورک‌فلوی .github/workflows/scanner-feed.yml همان اسکنر واقعی را روی رانر گیت‌هاب
+// اجرا می‌کند و نتیجه را در scanner/cloud-feed.jsonl می‌گذارد. این ماژول با GitHub API
+// (فقط https://api.github.com) فید و وضعیت را می‌خواند، درخواست اسکن می‌دهد و محلی ذخیره می‌کند.
+
+export interface CloudFeedConfig {
+  repo: string;
+  ref: string;
+  requestPath: string;
+  feedPath: string;
+  statusPath: string;
+  outFile: string;
+  token: string;
+  pollTimeoutMs: number;
+}
+
+export interface CloudFetchOptions {
+  /** برای تست؛ پیش‌فرض fetch جهانی است. */
+  fetchImpl?: typeof fetch;
+}
+
+const CLOUD_DEFAULTS = {
+  ref: '',
+  requestPath: 'scanner/scan-request.json',
+  feedPath: 'scanner/cloud-feed.jsonl',
+  statusPath: 'scanner/cloud-status.json',
+};
+
+function ghToken(): string {
+  for (const key of ['GITHUB_TOKEN', 'GH_TOKEN']) {
+    const value = (process.env[key] || '').trim();
+    if (value) return value;
+  }
+  // اگر کاربر با gh CLI لاگین است، همان توکن استفاده می‌شود (بدون ذخیره‌سازی).
+  try {
+    return execFileSync('gh', ['auth', 'token'], { encoding: 'utf8', timeout: 8000 }).trim();
+  } catch {
+    return '';
+  }
+}
+
+/** اگر KONKLANCER_CLOUD_FEED_REPO تنظیم شده باشد، فید ابری فعال است. */
+export function readCloudFeedConfig(
+  env: NodeJS.ProcessEnv = process.env,
+  cwd = process.cwd(),
+  defaultOutFile = defaultFeedFile(cwd),
+): CloudFeedConfig | null {
+  const repo = (env.KONKLANCER_CLOUD_FEED_REPO || '').trim();
+  if (!repo.includes('/')) return null;
+  return {
+    repo,
+    ref: (env.KONKLANCER_CLOUD_FEED_REF || CLOUD_DEFAULTS.ref).trim(),
+    requestPath: (env.KONKLANCER_CLOUD_REQUEST_PATH || CLOUD_DEFAULTS.requestPath).trim(),
+    feedPath: (env.KONKLANCER_CLOUD_FEED_PATH || CLOUD_DEFAULTS.feedPath).trim(),
+    statusPath: (env.KONKLANCER_CLOUD_STATUS_PATH || CLOUD_DEFAULTS.statusPath).trim(),
+    outFile: (env.KONKLANCER_PROJECTS_FILE || '').trim() || defaultOutFile,
+    token: (env.KONKLANCER_CLOUD_TOKEN || '').trim() || ghToken(),
+    pollTimeoutMs: Number(env.KONKLANCER_CLOUD_POLL_MS) || 300_000,
+  };
+}
+
+function ghHeaders(config: CloudFeedConfig): Record<string, string> {
+  const headers: Record<string, string> = {
+    accept: 'application/vnd.github+json',
+    'user-agent': 'konklancer-cloud-feed',
+  };
+  if (config.token) headers.authorization = `Bearer ${config.token}`;
+  return headers;
+}
+
+function ghUrl(config: CloudFeedConfig, suffix: string, ref?: string): string {
+  const query = ref ? `?ref=${encodeURIComponent(ref)}` : '';
+  return `https://api.github.com/repos/${config.repo}/${suffix}${query}`;
+}
+
+async function ghGetFile(
+  config: CloudFeedConfig,
+  filePath: string,
+  options: CloudFetchOptions = {},
+): Promise<{ text: string; sha: string } | null> {
+  const doFetch = options.fetchImpl ?? fetch;
+  const res = await doFetch(ghUrl(config, `contents/${filePath}`, config.ref), { headers: ghHeaders(config) });
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error(`GitHub API ${res.status} برای ${filePath}`);
+  const payload = (await res.json()) as { content?: string; encoding?: string; sha?: string };
+  const text = payload.content ? Buffer.from(payload.content, 'base64').toString('utf8') : '';
+  return { text, sha: payload.sha ?? '' };
+}
+
+export async function fetchCloudStatus(
+  config: CloudFeedConfig,
+  options: CloudFetchOptions = {},
+): Promise<Record<string, any> | null> {
+  const file = await ghGetFile(config, config.statusPath, options);
+  if (!file) return null;
+  try {
+    return JSON.parse(file.text);
+  } catch {
+    return null;
+  }
+}
+
+/** متن فید ابری (JSONL) را می‌خواند؛ null یعنی هنوز منتشر نشده. */
+export async function fetchCloudFeedText(
+  config: CloudFeedConfig,
+  options: CloudFetchOptions = {},
+): Promise<string | null> {
+  const file = await ghGetFile(config, config.feedPath, options);
+  return file ? file.text : null;
+}
+
+/**
+ * فید ابری را می‌گیرد و با فید محلی ادغام می‌کند (کلید = id، نسخه‌ی ابری برنده).
+ * خروجی: تعداد رکوردهای ابری، کل رکوردهای نوشته‌شده و وضعیت اسکن.
+ */
+export async function syncCloudFeed(
+  config: CloudFeedConfig,
+  options: CloudFetchOptions = {},
+): Promise<{ ok: boolean; cloudProjects: number; totalProjects: number; written: boolean; status: Record<string, any> | null; message: string }> {
+  const text = await fetchCloudFeedText(config, options);
+  const status = await fetchCloudStatus(config, options);
+  if (text === null) {
+    return {
+      ok: false,
+      cloudProjects: 0,
+      totalProjects: readProjects(config.outFile).length,
+      written: false,
+      status,
+      message: 'فید ابری هنوز منتشر نشده است؛ یک اسکن ابری درخواست کنید.',
+    };
+  }
+
+  const cloudRows = text
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      try {
+        return JSON.parse(line) as ScannedProject;
+      } catch {
+        return null;
+      }
+    })
+    .filter((row): row is ScannedProject => Boolean(row && row.id && row.title && row.url));
+
+  const merged = new Map<string, ScannedProject>();
+  for (const project of readProjects(config.outFile)) merged.set(project.id, project);
+  for (const project of cloudRows) merged.set(project.id, project);
+
+  const rows = [...merged.values()];
+  fs.mkdirSync(path.dirname(config.outFile), { recursive: true });
+  fs.writeFileSync(config.outFile, rows.map((row) => JSON.stringify(row)).join('\n') + (rows.length ? '\n' : ''), 'utf8');
+
+  return {
+    ok: true,
+    cloudProjects: cloudRows.length,
+    totalProjects: rows.length,
+    written: true,
+    status,
+    message: `${cloudRows.length} رکورد ابری خوانده و در ${config.outFile} ادغام شد.`,
+  };
+}
+
+/**
+ * درخواست اسکن ابری: فایل scanner/scan-request.json را با پارامترهای تازه به‌روزرسانی می‌کند
+ * (همین تغییر، ورک‌فلوی اسکن را روی گیت‌هاب اجرا می‌کند).
+ */
+export async function requestCloudScan(
+  config: CloudFeedConfig,
+  params: { platforms?: string; pages?: number; delay?: number; telegram?: boolean } = {},
+  options: CloudFetchOptions = {},
+): Promise<{ ok: boolean; message: string }> {
+  if (!config.token) {
+    return { ok: false, message: 'توکن گیت‌هاب موجود نیست؛ GITHUB_TOKEN یا gh auth login لازم است.' };
+  }
+  const doFetch = options.fetchImpl ?? fetch;
+  const existing = await ghGetFile(config, config.requestPath, options);
+  const current = existing ? (JSON.parse(existing.text || '{}') as Record<string, unknown>) : {};
+  const next = {
+    _comment: current._comment ?? 'برای درخواست اسکن تازه، یکی از مقدارها را تغییر دهید و کامیت کنید؛ ورک‌فلوی scanner-feed اجرا می‌شود.',
+    platforms: params.platforms ?? current.platforms ?? 'parscoders,ponisha,karlancer',
+    pages: params.pages ?? current.pages ?? 1,
+    delay: params.delay ?? current.delay ?? 8,
+    telegram: params.telegram === undefined ? (current.telegram ?? 1) : params.telegram ? 1 : 0,
+    requested_at: new Date().toISOString(),
+  };
+  const res = await doFetch(ghUrl(config, `contents/${config.requestPath}`), {
+    method: 'PUT',
+    headers: { ...ghHeaders(config), 'content-type': 'application/json' },
+    body: JSON.stringify({
+      message: 'data(scan): درخواست اسکن زنده از کنکلنسر [skip ci]',
+      content: Buffer.from(JSON.stringify(next, null, 2) + '\n', 'utf8').toString('base64'),
+      branch: config.ref || undefined,
+      sha: existing?.sha || undefined,
+    }),
+  });
+  if (!res.ok) {
+    const body = await res.text();
+    return { ok: false, message: `درخواست اسکن ابری ثبت نشد (HTTP ${res.status}): ${body.slice(0, 200)}` };
+  }
+  return { ok: true, message: `درخواست اسکن ابری برای ${config.repo} ثبت شد؛ رانر گیت‌هاب در حال اجراست.` };
+}
+
+/** تا وقتی وضعیت ابری «finished» تازه‌ای نیامده صبر می‌کند (با سقف زمانی). */
+export async function waitForCloudScan(
+  config: CloudFeedConfig,
+  sinceIso: string,
+  options: CloudFetchOptions = {},
+): Promise<Record<string, any> | null> {
+  const deadline = Date.now() + config.pollTimeoutMs;
+  let latest: Record<string, any> | null = null;
+  while (Date.now() < deadline) {
+    try {
+      latest = await fetchCloudStatus(config, options);
+      if (latest && latest.phase === 'finished' && String(latest.finished_at ?? '') >= sinceIso) return latest;
+    } catch {
+      // خطای موقت شبکه: دوباره تلاش می‌کنیم.
+    }
+    await new Promise((resolve) => setTimeout(resolve, 15_000));
+  }
+  return latest;
 }

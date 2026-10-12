@@ -10,6 +10,12 @@ import { ALL_CATEGORIES, categoryLabel, categoryPromptList } from './shared/taxo
 import {
   buildFeed,
   categorize,
+  fetchCloudFeedText,
+  fetchCloudStatus,
+  readCloudFeedConfig,
+  requestCloudScan,
+  syncCloudFeed,
+  waitForCloudScan,
   describeCategories,
   readProjects,
   readScanConfig,
@@ -216,6 +222,8 @@ let feedIndex = 0;
 // SPEC-004 — فید واقعی از اسکنر فقط‌خواندنی (scanner/out/projects.jsonl)
 // ---------------------------------------------------------------------------
 const SCAN_CONFIG = readScanConfig();
+/** فید ابری (اسکن روی رانرهای گیت‌هاب) — وقتی KONKLANCER_CLOUD_FEED_REPO تنظیم شده باشد فعال است. */
+const CLOUD_CONFIG = readCloudFeedConfig(process.env, process.cwd(), SCAN_CONFIG.outFile);
 /** شناسه پروژه‌هایی که یک‌بار به UI پوش شده‌اند؛ برای جلوگیری از پوش تکراری. */
 const emittedJobIds = new Set<string>();
 
@@ -448,6 +456,91 @@ app.post('/api/bridge/trigger-scan', async (_req: Request, res: Response) => {
   res.status(outcome.ok ? 200 : 502).json({ ...outcome, success: outcome.ok, job: null });
 });
 
+// Endpoint: وضعیت فید ابری (اسکن روی رانرهای گیت‌هاب)
+app.get('/api/bridge/cloud', async (_req: Request, res: Response) => {
+  if (!CLOUD_CONFIG) {
+    return res.json({
+      success: true,
+      enabled: false,
+      message: 'فید ابری تنظیم نشده است؛ KONKLANCER_CLOUD_FEED_REPO را در .env بگذارید.',
+    });
+  }
+  try {
+    const status = await fetchCloudStatus(CLOUD_CONFIG);
+    const feedText = await fetchCloudFeedText(CLOUD_CONFIG);
+    return res.json({
+      success: true,
+      enabled: true,
+      repo: CLOUD_CONFIG.repo,
+      ref: CLOUD_CONFIG.ref,
+      hasToken: Boolean(CLOUD_CONFIG.token),
+      cloudProjects: feedText ? feedText.split('\n').filter(Boolean).length : 0,
+      status,
+    });
+  } catch (error: any) {
+    return res.status(502).json({ success: false, error: error?.message ?? 'خطای خواندن وضعیت ابری' });
+  }
+});
+
+// Endpoint: همگام‌سازی فید محلی با آخرین فید ابری (بدون اجرای اسکن)
+app.post('/api/bridge/sync-feed', async (_req: Request, res: Response) => {
+  if (!CLOUD_CONFIG) {
+    return res.status(400).json({ success: false, error: 'فید ابری تنظیم نشده است.' });
+  }
+  try {
+    const result = await syncCloudFeed(CLOUD_CONFIG);
+    if (result.written) {
+      emitBridgeLog(`فید ابری همگام شد: ${result.cloudProjects} پروژه‌ی ابری · کل ${result.totalProjects}`, 'scan');
+    }
+    return res.status(result.ok ? 200 : 502).json({ success: result.ok, ...result });
+  } catch (error: any) {
+    return res.status(502).json({ success: false, error: error?.message ?? 'همگام‌سازی فید ابری ناموفق بود' });
+  }
+});
+
+// Endpoint: درخواست اسکن ابری (اجرای اسکنر واقعی روی رانر گیت‌هاب) و سپس همگام‌سازی فید
+app.post('/api/bridge/cloud-scan', async (req: Request, res: Response) => {
+  if (!CLOUD_CONFIG) {
+    return res.status(400).json({ success: false, error: 'فید ابری تنظیم نشده است.' });
+  }
+  try {
+    const since = new Date().toISOString();
+    const request = await requestCloudScan(CLOUD_CONFIG, {
+      platforms: typeof req.body?.platforms === 'string' ? req.body.platforms : undefined,
+      pages: Number(req.body?.pages) || undefined,
+      telegram: req.body?.telegram === undefined ? undefined : Boolean(req.body.telegram),
+    });
+    if (!request.ok) return res.status(400).json({ success: false, ...request });
+
+    emitBridgeLog(request.message, 'scan');
+    res.status(202).json({ success: true, queued: true, message: request.message });
+
+    void (async () => {
+      try {
+        const status = await waitForCloudScan(CLOUD_CONFIG, since);
+        const synced = await syncCloudFeed(CLOUD_CONFIG);
+        emitBridgeLog(
+          synced.ok
+            ? `اسکن ابری تمام شد: ${synced.cloudProjects} پروژه‌ی ابری (${status?.projects_this_run ?? 0} در این اجرا)`
+            : `اسکن ابری تمام شد ولی فید تازه‌ای منتشر نشد: ${synced.message}`,
+          'scan',
+        );
+        io.emit('scan:done', {
+          added: status?.projects_this_run ?? synced.cloudProjects,
+          total: status?.projects_in_feed ?? synced.totalProjects,
+          scannedAt: status?.finished_at ?? new Date().toISOString(),
+          source: 'cloud',
+        });
+      } catch (error: any) {
+        emitBridgeLog(`پیگیری اسکن ابری ناموفق بود: ${error?.message ?? error}`, 'scan');
+      }
+    })();
+    return;
+  } catch (error: any) {
+    return res.status(502).json({ success: false, error: error?.message ?? 'درخواست اسکن ابری ناموفق بود' });
+  }
+});
+
 // Endpoint: دسته‌بندی پروژه با دسته‌های مشترک (shared/taxonomy.json)
 app.post('/api/categorize-job', async (req: Request, res: Response) => {
   try {
@@ -509,6 +602,9 @@ app.get('/api/bridge/status', (_req: Request, res: Response) => {
       scanTelegram: SCAN_CONFIG.telegram,
       scanCategories: SCAN_CONFIG.categories,
       autoCalibrate: SCAN_CONFIG.autoCalibrate,
+      cloudFeed: CLOUD_CONFIG
+        ? { enabled: true, repo: CLOUD_CONFIG.repo, ref: CLOUD_CONFIG.ref, hasToken: Boolean(CLOUD_CONFIG.token) }
+        : { enabled: false },
       categories: describeCategories(),
       includeKeywords: SCAN_CONFIG.include,
       // سازگاری با پنل: فقط منابع فعال گزارش می‌شوند (بدون latency ساختگی)
@@ -721,6 +817,11 @@ async function startServer() {
   console.log(
     `[scanner] فید: ${SCAN_CONFIG.outFile} · ${feed.projects.length} پروژه در فایل · ${enabled.length} منبع فعال`,
   );
+  if (CLOUD_CONFIG) {
+    console.log(
+      `[scanner] فید ابری فعال: ${CLOUD_CONFIG.repo}@${CLOUD_CONFIG.ref || 'default'} · توکن: ${CLOUD_CONFIG.token ? 'دارد' : 'ندارد'}`,
+    );
+  }
   if (enabled.length > 0) {
     console.log(`[scanner] منابع فعال: ${enabled.map((t) => t.name).join(' · ')}`);
   } else if (feed.projects.length > 0) {

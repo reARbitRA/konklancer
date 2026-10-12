@@ -1,5 +1,5 @@
 import React from 'react';
-import { Database, FlaskConical, Radar, RefreshCw, Inbox } from 'lucide-react';
+import { Cloud, Database, Download, FlaskConical, Radar, RefreshCw, Inbox } from 'lucide-react';
 
 export type FeedSource = 'scanner' | 'demo' | 'empty' | 'unknown';
 
@@ -10,6 +10,11 @@ interface FeedStatusBarProps {
   jobCount: number;
   isScanning: boolean;
   onScan: () => void;
+  /** اسکن ابری روی رانرهای گیت‌هاب (وقتی KONKLANCER_CLOUD_FEED_REPO تنظیم شده باشد) */
+  cloudEnabled?: boolean;
+  cloudBusy?: boolean;
+  onCloudScan?: () => void;
+  onSyncFeed?: () => void;
 }
 
 /** فاصله‌ی زمانی را به فارسی و خوانا نشان می‌دهد. */
@@ -37,6 +42,10 @@ export const FeedStatusBar: React.FC<FeedStatusBarProps> = ({
   jobCount,
   isScanning,
   onScan,
+  cloudEnabled = false,
+  cloudBusy = false,
+  onCloudScan,
+  onSyncFeed,
 }) => {
   const palette =
     source === 'scanner'
@@ -66,15 +75,39 @@ export const FeedStatusBar: React.FC<FeedStatusBarProps> = ({
         )}
       </div>
 
-      <button
-        onClick={onScan}
-        disabled={isScanning}
-        className="flex items-center gap-1.5 rounded-md border border-slate-700/70 bg-slate-900/70 px-2.5 py-1 font-medium text-slate-200 transition-colors hover:bg-slate-800 disabled:opacity-50"
-      >
-        <RefreshCw className={`h-3 w-3 ${isScanning ? 'animate-spin' : ''}`} />
-        <span>{isScanning ? 'در حال اسکن...' : 'اسکن زنده'}</span>
-        {!isScanning && <Radar className="h-3 w-3 text-emerald-400" />}
-      </button>
+      <div className="flex items-center gap-2">
+        {cloudEnabled && (
+          <>
+            <button
+              onClick={onSyncFeed}
+              disabled={cloudBusy}
+              title="آخرین فید اسکن‌شده روی گیت‌هاب را بیاور (بدون اجرای اسکن تازه)"
+              className="flex items-center gap-1.5 rounded-md border border-slate-700/70 bg-slate-900/70 px-2.5 py-1 font-medium text-slate-200 transition-colors hover:bg-slate-800 disabled:opacity-50"
+            >
+              <Download className="h-3 w-3" />
+              <span>همگام‌سازی</span>
+            </button>
+            <button
+              onClick={onCloudScan}
+              disabled={cloudBusy}
+              title="اجرای اسکنر واقعی روی رانرهای گیت‌هاب (سایت‌های فریلنسری از این سرور قابل دسترسی نیستند)"
+              className="flex items-center gap-1.5 rounded-md border border-emerald-800/70 bg-emerald-950/50 px-2.5 py-1 font-medium text-emerald-200 transition-colors hover:bg-emerald-900/50 disabled:opacity-50"
+            >
+              <Cloud className={`h-3 w-3 ${cloudBusy ? 'animate-pulse' : ''}`} />
+              <span>{cloudBusy ? 'اسکن ابری در جریان...' : 'اسکن ابری'}</span>
+            </button>
+          </>
+        )}
+        <button
+          onClick={onScan}
+          disabled={isScanning}
+          className="flex items-center gap-1.5 rounded-md border border-slate-700/70 bg-slate-900/70 px-2.5 py-1 font-medium text-slate-200 transition-colors hover:bg-slate-800 disabled:opacity-50"
+        >
+          <RefreshCw className={`h-3 w-3 ${isScanning ? 'animate-spin' : ''}`} />
+          <span>{isScanning ? 'در حال اسکن...' : 'اسکن زنده'}</span>
+          {!isScanning && <Radar className="h-3 w-3 text-emerald-400" />}
+        </button>
+      </div>
     </div>
   );
 };

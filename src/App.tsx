@@ -150,6 +150,9 @@ export default function App() {
 
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
+  // فید ابری: اسکنر واقعی روی رانرهای گیت‌هاب اجرا می‌شود (سایت‌ها از این سرور قابل دسترسی نیستند)
+  const [cloudInfo, setCloudInfo] = useState<{ enabled: boolean; repo?: string; status?: any }>({ enabled: false });
+  const [cloudBusy, setCloudBusy] = useState(false);
 
   // Sync state to localStorage
   useEffect(() => {
@@ -157,6 +160,19 @@ export default function App() {
   }, [jobs]);
 
   // SPEC-004: خواندن فید از سرور (خروجی اسکنر) به‌جای داده‌ی ساختگی.
+  const refreshCloudStatus = useCallback(async () => {
+    try {
+      const res = await fetch('/api/bridge/cloud');
+      const data = await res.json();
+      setCloudInfo({ enabled: Boolean(data?.enabled && data?.hasToken !== false), repo: data?.repo, status: data?.status });
+      return data;
+    } catch {
+      setCloudInfo({ enabled: false });
+      return null;
+    }
+  }, []);
+
+  // همگام‌سازی فید محلی با آخرین فید ابری
   const refreshFeed = useCallback(async (): Promise<void> => {
     try {
       const response = await fetch('/api/jobs');
@@ -182,6 +198,7 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    refreshCloudStatus();
     refreshFeed();
   }, [refreshFeed]);
 
@@ -249,6 +266,54 @@ export default function App() {
     };
     setLogs((prev) => [newLog, ...prev.slice(0, 49)]);
   };
+
+  // --- فید ابری: همگام‌سازی و درخواست اسکن روی رانر گیت‌هاب ---
+  const handleSyncCloudFeed = useCallback(async () => {
+    setCloudBusy(true);
+    try {
+      const res = await fetch('/api/bridge/sync-feed', { method: 'POST' });
+      const data = await res.json();
+      addLog(String(data?.message ?? data?.error ?? 'همگام‌سازی فید انجام شد.'), 'scan');
+      await refreshFeed();
+      await refreshCloudStatus();
+    } catch (err: any) {
+      addLog(`همگام‌سازی فید ناموفق بود: ${err?.message ?? err}`, 'scan');
+    } finally {
+      setCloudBusy(false);
+    }
+  }, [refreshFeed, refreshCloudStatus]);
+
+  // درخواست اسکن ابری: رانر گیت‌هاب اسکنر واقعی را اجرا می‌کند و بعد فید همگام می‌شود
+  const handleCloudScan = useCallback(async () => {
+    setCloudBusy(true);
+    addLog('درخواست اسکن ابری ثبت شد؛ رانر گیت‌هاب در حال اجرای اسکنر واقعی است...', 'scan');
+    try {
+      const res = await fetch('/api/bridge/cloud-scan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+      const data = await res.json();
+      addLog(String(data?.message ?? data?.error ?? 'درخواست اسکن ابری ثبت شد.'), 'scan');
+      // پیگیری وضعیت هر ۱۵ ثانیه تا پایان اجرا (سقف ~۵ دقیقه)
+      const deadline = Date.now() + 5 * 60_000;
+      while (Date.now() < deadline) {
+        await new Promise((resolve) => setTimeout(resolve, 15_000));
+        const status = await refreshCloudStatus();
+        if (status?.status?.phase === 'finished') {
+          addLog(`اسکن ابری تمام شد (${status.status.projects_this_run ?? 0} پروژه در این اجرا).`, 'scan');
+          await handleSyncCloudFeed();
+          return;
+        }
+      }
+      addLog('زمان پیگیری اسکن ابری تمام شد؛ بعداً دکمه‌ی «همگام‌سازی» را بزنید.', 'scan');
+    } catch (err: any) {
+      addLog(`اسکن ابری ناموفق بود: ${err?.message ?? err}`, 'scan');
+    } finally {
+      setCloudBusy(false);
+    }
+  }, [addLog, refreshCloudStatus, handleSyncCloudFeed]);
+
 
   // Robust Socket.io Client Setup with Exponential Backoff Reconnection Policy
   useEffect(() => {
@@ -642,6 +707,10 @@ export default function App() {
             jobCount={jobs.length}
             isScanning={isScanning}
             onScan={handleQuickScan}
+            cloudEnabled={cloudInfo.enabled}
+            cloudBusy={cloudBusy}
+            onCloudScan={handleCloudScan}
+            onSyncFeed={handleSyncCloudFeed}
           />
         )}
         {activeTab === 'hunter' && (
