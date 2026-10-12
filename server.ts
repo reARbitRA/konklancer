@@ -821,6 +821,15 @@ async function startServer() {
     console.log(
       `[scanner] فید ابری فعال: ${CLOUD_CONFIG.repo}@${CLOUD_CONFIG.ref || 'default'} · توکن: ${CLOUD_CONFIG.token ? 'دارد' : 'ندارد'}`,
     );
+    // اگر فید محلی خالی بود، یک‌بار از فید ابری پر می‌شود (شخصی‌سازی: بدون تنظیم دستی).
+    if (feed.projects.length === 0 && CLOUD_CONFIG.token) {
+      void syncCloudFeed(CLOUD_CONFIG)
+        .then((result) => {
+          console.log(`[scanner] ${result.message}`);
+          if (result.written) emitBridgeLog(`فید ابری در راه‌اندازی همگام شد: ${result.cloudProjects} پروژه`, 'scan');
+        })
+        .catch((error) => console.warn(`[scanner] همگام‌سازی فید ابری در راه‌اندازی ناموفق بود: ${error?.message ?? error}`));
+    }
   }
   if (enabled.length > 0) {
     console.log(`[scanner] منابع فعال: ${enabled.map((t) => t.name).join(' · ')}`);

@@ -55,6 +55,16 @@ npm start                        # http://localhost:3000
 گام‌به‌گام (نصب، موتور AI، فعال‌کردن تلگرام یا یک پلتفرم، اسکن دوره‌ای، تنظیم سلیقه و عیب‌یابی):
 **[docs/PERSONAL-SETUP.md](docs/PERSONAL-SETUP.md)**.
 
+**اگر ماشین/شبکه‌ی شما به سایت‌های فریلنسری دسترسی ندارد:** همان اسکنر روی **رانرهای گیت‌هاب** اجرا
+می‌شود و نتیجه در فید می‌آید (ورک‌فلوی `.github/workflows/scanner-feed.yml`):
+
+```bash
+# در .env:  KONKLANCER_CLOUD_FEED_REPO="reARbitRA/konklancer" و KONKLANCER_CLOUD_FEED_REF="<برنچ>"
+curl -s -X POST localhost:3000/api/bridge/cloud-scan | jq .   # اجرای اسکن واقعی روی گیت‌هاب
+curl -s -X POST localhost:3000/api/bridge/sync-feed  | jq .   # فقط کشیدن آخرین فید
+```
+در UI هم دو دکمه‌ی «اسکن ابری» و «همگام‌سازی» در نوار وضعیت فید همین کار را می‌کنند.
+
 ```bash
 python -m scanner.konklancer_scan list                            # چه چیزی اسکن‌شدنی است + فهرست دسته‌ها
 python -m scanner.konklancer_scan autoscan --platform parscoders,ponisha --save   # اسکن واقعی + کشف خودکار ساختار
@@ -77,7 +87,7 @@ python -m scanner.konklancer_scan enable --telegram workarc       # سریع‌�
 - `freelance_pro_engine.py` قدیمی است و اجرا نمی‌شود.
 
 ## محدودیت‌های فعلی
-- «نامزدهای» انتخابگر سه پلتفرم (پارس‌کدرز/پونیشا/کارلنسر) از کد عمومی یک مخزن دیگر گرفته شده و **روی صفحه‌ی زنده تأیید نشده‌اند**؛ با `probe`/`autoscan` روی کامپیوتر خودتان تأیید یا جایگزین می‌شوند (SPEC-004 R3).
+- انتخابگرهای **کارلنسر** و **پونیشا** روی نمونه‌ی HTML واقعی تأیید شده‌اند (`scan_selectors_verified` در `platforms.json`)؛ انتخابگرهای **پارس‌کدرز** هنوز تأییدنشده‌اند (صفحه در اجرای رانر تایم‌اوت داد) و با `KONKLANCER_HTTP_TIMEOUT=45` دوباره تلاش می‌شود (SPEC-004 R3).
 - سایت‌های JS-محور یا ضدربات (احتمالاً کارلنسر) با `autoscan` خالی برمی‌گردند؛ Playwright پیاده نشده و مسیر جایگزین، ذخیره‌ی صفحه در مرورگر و `autoscan --html` است.
 - احراز هویت برای `/api/*` هنوز اضافه نشده (SPEC-003 R5).
 - پیش‌فیلتر قانون‌محور قبل از تماس AI هنوز نیست (SPEC-004 R5).
