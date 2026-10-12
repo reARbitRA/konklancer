@@ -1,6 +1,12 @@
 name: Build Android APK
 
 on:
+  push:
+    branches:
+      - arena/bb8cb4b4-konklancer
+    paths:
+      - 'mobile/**'
+      - '.github/workflows/build-android-apk.yml'
   workflow_dispatch:
     inputs:
       server_url:
@@ -18,7 +24,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
-      CAPACITOR_SERVER_URL: ${{ inputs.server_url }}
+      CAPACITOR_SERVER_URL: ${{ github.event.inputs.server_url || 'https://3000-iu2j2a5v6rrow7g0k1v2w.e2b.app' }}
     steps:
       - name: Check out source
         uses: actions/checkout@v4
