@@ -302,6 +302,7 @@ NAV_PATHS = {
     "", "/", "/login", "/signin", "/signup", "/register", "/post-job", "/new-project",
     "/blog", "/about", "/contact", "/faq", "/terms", "/privacy", "/panel", "/dashboard",
     "/jobs", "/services", "/freelancers", "/freelancer", "/users", "/profile", "/search",
+    "/hire", "/talent", "/employers", "/employer",
 }
 #: عنوان‌هایی که آیتم منو هستند، نه پروژه
 NAV_TITLES = {
@@ -315,7 +316,11 @@ def _looks_like_nav_item(url: str, title: str) -> bool:
     path = urlparse(url).path.rstrip("/").lower()
     if path in NAV_PATHS:
         return True
-    if re.search(r"/(login|signin|signup|register|post-job|new-project|blog|about|contact|faq|terms|privacy|panel)(/|$)", path):
+    if re.search(
+        r"/(login|signin|signup|register|post-job|new-project|blog|about|contact|faq|terms|privacy"
+        r"|panel|dashboard|hire|talent|employers?|freelancers?|services?|jobs?)(/|$)",
+        path,
+    ):
         return True
     if re.search(r"/(api|assets?|static|img|images|uploads|files)/", path):
         return True
@@ -421,6 +426,7 @@ def matches(
     project: Project,
     include: Iterable[str],
     exclude: Iterable[str],
+    *,
     categories: Iterable[str] = (),
 ) -> bool:
     """فیلتر کلیدواژه‌ای و دسته‌ای.
@@ -820,7 +826,7 @@ def cmd_scan(args) -> int:
             "`enable` فعال کنید، یا از `autoscan --platform <id>` استفاده کنید."
         )
 
-    kept = [p for p in collected if matches(p, include, exclude, categories)]
+    kept = [p for p in collected if matches(p, include, exclude, categories=categories)]
     added = append_projects(Path(args.out), kept)
     print(f"{len(collected)} مورد خوانده شد؛ {len(kept)} پس از فیلتر؛ {added} مورد جدید در {args.out}")
     return 0
@@ -1043,7 +1049,7 @@ def cmd_autoscan(args) -> int:
                 print(f"[{plat['id']}] صفحه {n}: {len(items)} پروژه")
                 collected += items
 
-    kept = [p for p in collected if matches(p, include, exclude, categories)]
+    kept = [p for p in collected if matches(p, include, exclude, categories=categories)]
     added = append_projects(Path(args.out), kept)
     by_category: dict[str, int] = {}
     for project in kept:
