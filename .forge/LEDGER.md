@@ -14,3 +14,9 @@
 **Verified:** npm test 7/7; tsc OK; vite build OK; scanner tests 11/11; E2E with local gateway (no provider keys): analyze/proposal → AI_UNAVAILABLE 503, categorize keyword fallback, unconfigured → 503 AI_NOT_CONFIGURED.
 **Not verified:** live provider output (no real keys).
 **Status:** T-006 DONE. T-003 DOING, T-004 OPEN, T-005 OPEN.
+## 2026-10-12 · session-004 · arena/bb8cb4b4-konklancer
+**Did:** درخواست کاربر: «آماده‌سازی برای استفاده‌ی شخصی؛ برای خودم اسکن کند». پیاده‌سازی حلقه‌ی گمشده‌ی SPEC-004 و یک لایه‌ی حالت شخصی:
+server/scannerBridge.ts (نگاشت JSONL→فید، بودجه‌ی فارسی/ریال، امتیاز پیش‌فیلتر، runScanner با قفل)، بازنویسی /api/jobs و /api/bridge/trigger-scan و /api/bridge/status، رویداد scan:done، اسکن دوره‌ای اختیاری، FeedStatusBar، حذف داده‌ی ساختگی از مسیر پیش‌فرض، لینک صفحه‌ی پروژه و چیپ امتیاز، enable/disable + parse-file --out + parse-telegram-file در اسکنر، تفکیک پیام‌های robots، docs/PERSONAL-SETUP.md، SPEC-007 (DRAFT)، T-007.
+**Verified:** npm test 19/19 (۱۲ تازه)؛ pytest 19/19 (۴ تازه)؛ tsc و vite build سالم؛ E2E با فید ساختگی: source=scanner، امتیاز/دلایل درست، trigger-scan واقعی (spawn پایتون + guard robots + خروج تمیز)، parse-file --out فید زنده را به‌روز کرد.
+**Not verified:** اسکن واقعی سایت/کانال (شبکه‌ی محیط توسعه دسترسی ندارد).
+**Status:** T-007 DONE (SPEC-007 DRAFT، نیازمند تأیید). T-004: R2/R4/R5/R6 انجام شد؛ R7 (اعلان تلگرام) باز. T-003 R5 (auth API) و T-005 (SQLite/نرخ برد) همچنان باز.

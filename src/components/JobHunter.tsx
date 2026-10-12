@@ -249,6 +249,15 @@ export const JobHunter: React.FC<JobHunterProps> = ({
                     </span>
                   )}
 
+                  {typeof job.score === 'number' && (
+                    <span
+                      title={job.scoreReasons?.join(' · ') ?? undefined}
+                      className="rounded border border-slate-700/80 bg-slate-800/70 px-2 py-0.5 font-mono text-[10px] text-slate-300"
+                    >
+                      امتیاز فید: {job.score.toLocaleString('fa-IR')}
+                    </span>
+                  )}
+
                   <span className="text-xs text-slate-400">بودجه کارفرما:</span>
                   <span className="font-mono text-sm font-bold text-emerald-400 tabular-nums">
                     {job.budgetFormatted}
@@ -302,6 +311,19 @@ export const JobHunter: React.FC<JobHunterProps> = ({
                 </div>
 
                 <div className="flex items-center gap-2">
+                  {/* Open the original listing (SPEC-004: پروژه‌ها از اسکنر عمومی می‌آیند) */}
+                  {job.url && (
+                    <a
+                      href={job.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-700/80 rounded-lg text-xs font-medium transition-colors"
+                    >
+                      <ExternalLink className="h-3.5 w-3.5 text-slate-400" />
+                      <span>صفحه‌ی پروژه</span>
+                    </a>
+                  )}
+
                   {/* Start Agent Code Solution */}
                   <button
                     onClick={() => onSelectJobForCoding(job)}

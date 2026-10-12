@@ -28,6 +28,12 @@ export interface FreelanceJob {
   priority?: PriorityLevel;
   categorizedTag?: JobCategoryTag;
   completedAt?: string; // ISO date e.g. '2026-10-09'
+  // SPEC-004: فیلدهایی که از خروجی اسکنر می‌آیند
+  url?: string; // لینک صفحه‌ی اصلی پروژه روی پلتفرم
+  source?: string; // منبع اسکن (مثلاً 'parscoders' یا 'telegram:workarc')
+  score?: number; // امتیاز پیش‌فیلتر قاعده‌محور (۰ تا ۱۰۰)
+  scoreReasons?: string[]; // دلایل امتیاز، برای نمایش شفاف
+  scrapedAt?: string; // زمان اسکن (ISO)
   aiAnalysis?: AIAnalysis;
   proposal?: string;
   proposedPrice?: number;

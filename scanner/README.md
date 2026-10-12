@@ -22,15 +22,26 @@ python -m pytest -q scanner/tests
 ## دستورها
 
 ```bash
-python -m scanner.konklancer_scan list                        # وضعیت هر پلتفرم
+python -m scanner.konklancer_scan list                        # وضعیت پلتفرم‌ها و کانال‌های تلگرام
 python -m scanner.konklancer_scan snapshot --platform parscoders   # یک صفحه برای کالیبره کردن
 python -m scanner.konklancer_scan parse-file --platform parscoders --html FILE.html \
-    --selectors-json '{"item":"...","title":"..."}' --include پایتون,python   # تست آفلاین
+    --selectors-json '{"item":"...","title":"..."}' --include پایتون,python --out scanner/out/projects.jsonl
+python -m scanner.konklancer_scan parse-telegram-file --channel workarc --html tg.html --out scanner/out/projects.jsonl
 python -m scanner.konklancer_scan scan --platform parscoders --pages 2 --include پایتون,python
 python -m scanner.konklancer_scan scan --telegram --include پایتون
+
+# فعال/غیرفعال کردن یک منبع برای اسکن خودکار
+python -m scanner.konklancer_scan enable  --telegram workarc     # بدون نیاز به انتخابگر
+python -m scanner.konklancer_scan enable  --platform parscoders  # فقط بعد از ثبت scan_selectors
+python -m scanner.konklancer_scan disable --telegram workarc
 ```
 
-خروجی هر اجرا فایل `scanner/out/projects.jsonl` است؛ هر خط یک پروژه با `id`، `source`، `title`، `url`، `budget_text`، `bids_text`، `posted_text` و `scraped_at`. تکراری‌ها بر اساس `id` حذف می‌شوند.
+`parse-file --out` و `parse-telegram-file` مسیر «صفحه را در مرورگر ذخیره کن و همان‌جا تجزیه کن» را
+پوشش می‌دهند: بدون هیچ درخواست خودکار به سایت، رکوردها در فید JSONL نوشته و در UI دیده می‌شوند
+(جزئیات: `docs/PERSONAL-SETUP.md`).
+
+پیام‌های توقف در `fetch_html` تفکیک شده‌اند: منع صریح `robots.txt`، خطای ۵xx و خطای شبکه (بی‌دسترسی)
+هر کدام پیام جدا دارند؛ در هر سه حالت آن میزبان برای همان اجرا کنار گذاشته می‌شود.
 
 ## چرا هیچ پلتفرمی هنوز اسکن نمی‌شود؟
 

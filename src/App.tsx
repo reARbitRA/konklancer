@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { 
   AlertTriangle, 
@@ -20,6 +20,7 @@ import { SettingsModal } from './components/SettingsModal';
 import { INITIAL_JOBS } from './data/mockJobs';
 import { FreelanceJob, AIAnalysis, ActivityLogItem, UserSettings, PriorityLevel } from './types';
 import { categorizeJobWithGemini } from './utils/geminiCategorizer';
+import { FeedStatusBar, FeedSource } from './components/FeedStatusBar';
 
 /**
  * Runtime Type Guard to strictly validate incoming Socket.io data
@@ -37,37 +38,62 @@ function isValidFreelanceJob(data: any): data is FreelanceJob {
   return true;
 }
 
+/** فیلدهای مشتق‌شده‌ی هر پروژه (اولویت و تگ دسته) را کامل می‌کند. */
+function enrichJob(job: FreelanceJob): FreelanceJob {
+  return {
+    ...job,
+    priority: job.priority || (job.budget >= 6000000 ? 'High' : job.budget >= 4000000 ? 'Medium' : 'Low'),
+    categorizedTag:
+      job.categorizedTag ||
+      (job.tags?.find((tag) => ['Frontend', 'Backend', 'DevOps', 'Design'].includes(tag)) as
+        | FreelanceJob['categorizedTag']
+        | undefined) ||
+      'Backend',
+  };
+}
+
+/**
+ * فید تازه را با پروژه‌های محلی کاربر ادغام می‌کند.
+ * وضعیت/تحلیل/پروپوزالِ پروژه‌های شناخته‌شده دست‌نخورده می‌ماند (SPEC-005 / localStorage).
+ */
+function mergeFeedJobs(
+  current: FreelanceJob[],
+  incoming: FreelanceJob[],
+  seed: FreelanceJob[] = [],
+): FreelanceJob[] {
+  const known = new Set(current.map((job) => job.id));
+  const fresh = incoming.filter((job) => !known.has(job.id)).map(enrichJob);
+  const freshIds = new Set(fresh.map((job) => job.id));
+  const seeded = seed
+    .filter((job) => !known.has(job.id) && !freshIds.has(job.id))
+    .map(enrichJob);
+  return [...fresh, ...current, ...seeded];
+}
+
 export default function App() {
   // Navigation
   const [activeTab, setActiveTab] = useState<'hunter' | 'coder' | 'pipeline' | 'autopilot'>('hunter');
 
   // Core Data
+  // پروژه‌ها از فید واقعی (/api/jobs) می‌آیند؛ از localStorage فقط برای نگه‌داشتن
+  // وضعیت/تحلیل/پروپوزالِ خودِ کاربر استفاده می‌شود. داده‌ی ساختگی فقط در حالت دمو می‌آید.
   const [jobs, setJobs] = useState<FreelanceJob[]>(() => {
     const saved = localStorage.getItem('freelanceflow_jobs');
-    if (saved) {
-      try {
-        const parsed: FreelanceJob[] = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          const hasCompleted = parsed.some((j) => j.status === 'completed');
-          const enriched = parsed.map((j) => ({
-            ...j,
-            priority: j.priority || (j.budget >= 6000000 ? 'High' : j.budget >= 4000000 ? 'Medium' : 'Low'),
-            categorizedTag:
-              j.categorizedTag ||
-              (j.tags?.find((t) => ['Frontend', 'Backend', 'DevOps', 'Design'].includes(t)) as any) ||
-              'Backend',
-          }));
-          if (!hasCompleted) {
-            const initialCompleted = INITIAL_JOBS.filter((j) => j.status === 'completed');
-            return [...enriched, ...initialCompleted];
-          }
-          return enriched;
-        }
-      } catch (e) {
-        console.error('Failed to parse jobs from localStorage:', e);
-      }
+    if (!saved) return [];
+    try {
+      const parsed: FreelanceJob[] = JSON.parse(saved);
+      return Array.isArray(parsed) ? parsed.map(enrichJob) : [];
+    } catch (e) {
+      console.error('Failed to parse jobs from localStorage:', e);
+      return [];
     }
-    return INITIAL_JOBS;
+  });
+
+  // SPEC-004: منبع فید و زمان آخرین اسکن
+  const [feed, setFeed] = useState<{ source: FeedSource; scannedAt: string | null; scannedProjects: number }>({
+    source: 'unknown',
+    scannedAt: null,
+    scannedProjects: 0,
   });
 
   const [settings, setSettings] = useState<UserSettings>(() => {
@@ -112,7 +138,7 @@ export default function App() {
   // Selected Jobs for Modals & Workspaces
   const [selectedJobForAnalysis, setSelectedJobForAnalysis] = useState<FreelanceJob | null>(null);
   const [selectedJobForProposal, setSelectedJobForProposal] = useState<FreelanceJob | null>(null);
-  const [selectedJobForCoding, setSelectedJobForCoding] = useState<FreelanceJob | null>(() => INITIAL_JOBS[0] || null);
+  const [selectedJobForCoding, setSelectedJobForCoding] = useState<FreelanceJob | null>(null);
   const [gitHubPushState, setGitHubPushState] = useState<{
     job: FreelanceJob | null;
     files: Record<string, string>;
@@ -126,6 +152,35 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('freelanceflow_jobs', JSON.stringify(jobs));
   }, [jobs]);
+
+  // SPEC-004: خواندن فید از سرور (خروجی اسکنر) به‌جای داده‌ی ساختگی.
+  const refreshFeed = useCallback(async (): Promise<void> => {
+    try {
+      const response = await fetch('/api/jobs');
+      const data = await response.json();
+      const incoming: FreelanceJob[] = Array.isArray(data?.jobs)
+        ? data.jobs.filter(isValidFreelanceJob)
+        : [];
+      const source: FeedSource = (data?.source as FeedSource) ?? 'unknown';
+      setFeed({
+        source,
+        scannedAt: data?.scannedAt ?? null,
+        scannedProjects: typeof data?.scannedProjects === 'number' ? data.scannedProjects : incoming.length,
+      });
+      if (incoming.length > 0) {
+        setJobs((prev) => mergeFeedJobs(prev, incoming, source === 'demo' ? INITIAL_JOBS : []));
+      } else if (source === 'demo') {
+        setJobs((prev) => mergeFeedJobs(prev, [], INITIAL_JOBS));
+      }
+    } catch (err) {
+      console.warn('[feed] بارگذاری /api/jobs ناموفق بود:', err);
+      setFeed((prev) => ({ ...prev, source: 'unknown' }));
+    }
+  }, []);
+
+  useEffect(() => {
+    refreshFeed();
+  }, [refreshFeed]);
 
   const jobsRef = useRef(jobs);
   useEffect(() => {
@@ -297,6 +352,21 @@ export default function App() {
       );
     });
 
+    // نتیجه‌ی اسکن واقعی (SPEC-004) که سرور پس از پایان کار می‌فرستد
+    socket.on('scan:done', (payload: { added?: number; total?: number; scannedAt?: string | null }) => {
+      setIsScanning(false);
+      const added = payload?.added ?? 0;
+      const total = payload?.total ?? 0;
+      setFeed((prev) => ({
+        ...prev,
+        source: total > 0 ? 'scanner' : prev.source,
+        scannedAt: payload?.scannedAt ?? prev.scannedAt,
+        scannedProjects: total || prev.scannedProjects,
+      }));
+      addLog(`اسکن تمام شد: ${added} پروژه‌ی جدید (${total} پروژه در فید).`, 'scan');
+      refreshFeed();
+    });
+
     // Handle incoming bridge logs
     socket.on('bridge:log', (logPayload: { message: string; type?: ActivityLogItem['type'] }) => {
       if (logPayload?.message) {
@@ -309,7 +379,7 @@ export default function App() {
     return () => {
       socket.disconnect();
     };
-  }, []);
+  }, [refreshFeed]);
 
   const handleManualReconnect = () => {
     setIsReconnecting(true);
@@ -331,6 +401,17 @@ export default function App() {
       fetch('/api/bridge/trigger-scan', { method: 'POST' })
         .then((res) => res.json())
         .then(async (data) => {
+          setIsScanning(false);
+          if (data?.message) addLog(String(data.message), 'scan');
+          if (typeof data?.added === 'number') {
+            setFeed((prev) => ({
+              ...prev,
+              source: (data?.total ?? 0) > 0 ? 'scanner' : prev.source,
+              scannedAt: data?.scannedAt ?? prev.scannedAt,
+              scannedProjects: data?.total ?? prev.scannedProjects,
+            }));
+            refreshFeed();
+          }
           if (data.job && isValidFreelanceJob(data.job)) {
             let job = data.job;
             if (!job.categorizedTag) {
@@ -534,6 +615,16 @@ export default function App() {
 
       {/* Main Workspace Canvas */}
       <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8">
+        {activeTab === 'hunter' && (
+          <FeedStatusBar
+            source={feed.source}
+            scannedAt={feed.scannedAt}
+            scannedProjects={feed.scannedProjects}
+            jobCount={jobs.length}
+            isScanning={isScanning}
+            onScan={handleQuickScan}
+          />
+        )}
         {activeTab === 'hunter' && (
           <JobHunter
             jobs={jobs}

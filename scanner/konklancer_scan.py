@@ -105,24 +105,31 @@ class RobotsCache:
     def __init__(self, client: httpx.Client):
         self.client = client
         self._rules: dict[str, urllib.robotparser.RobotFileParser | None] = {}
+        self._blocked_reason: dict[str, str] = {}
 
     def allowed(self, url: str) -> bool:
         parsed = urlparse(url)
         host = parsed.netloc
         if host not in self._rules:
-            self._rules[host] = self._load(f"{parsed.scheme}://{host}/robots.txt")
+            self._rules[host] = self._load(f"{parsed.scheme}://{host}/robots.txt", host)
         rules = self._rules[host]
         if rules is None:
             return False
         return rules.can_fetch(USER_AGENT, url)
 
-    def _load(self, robots_url: str) -> urllib.robotparser.RobotFileParser | None:
+    def block_reason(self, host: str) -> str:
+        """چرا این میزبان کنار گذاشته شد؟ network | server | disallowed | unknown"""
+        return self._blocked_reason.get(host, "unknown")
+
+    def _load(self, robots_url: str, host: str) -> urllib.robotparser.RobotFileParser | None:
         rp = urllib.robotparser.RobotFileParser()
         try:
             resp = self.client.get(robots_url, timeout=15)
         except httpx.HTTPError:
+            self._blocked_reason[host] = "network"
             return None
         if resp.status_code >= 500:
+            self._blocked_reason[host] = "server"
             return None
         if resp.status_code >= 400:
             rp.parse([])
@@ -151,6 +158,17 @@ def fetch_html(
     allowed_domain: str,
 ) -> str:
     if not robots.allowed(url):
+        host = urlparse(url).netloc
+        reason = robots.block_reason(host)
+        if reason == "network":
+            raise PermissionError(
+                f"robots.txt میزبان {host} خوانده نشد (خطای شبکه یا بی‌دسترسی)؛ "
+                f"طبق RFC 9309 این میزبان محافظه‌کارانه کنار گذاشته شد: {url}"
+            )
+        if reason == "server":
+            raise PermissionError(
+                f"robots.txt میزبان {host} خطای ۵xx داد؛ این میزبان کنار گذاشته شد: {url}"
+            )
         raise PermissionError(f"robots.txt این مسیر را ممنوع کرده است: {url}")
     host = urlparse(url).netloc
     limiter.wait(host)
@@ -294,10 +312,72 @@ def page_url(template: str, page: int) -> str:
 # ---------------------------------------------------------------------------
 def cmd_list(_args) -> int:
     reg = load_registry()
+    print("== پلتفرم‌ها ==")
     for p in reg["platforms"]:
-        scan = "فعال" if p.get("scan_enabled") and p.get("scan_selectors") else "غیرفعال"
-        print(f"{p['id']:<16} {p['status']:<16} اسکن: {scan}")
+        has_selectors = bool(p.get("scan_selectors"))
+        if not has_selectors:
+            scan = "غیرفعال (انتخابگر CSS ثبت نشده)"
+        elif p.get("scan_enabled"):
+            scan = "فعال"
+        else:
+            scan = "غیرفعال (scan_enabled=false)"
+        print(f"{p['id']:<16} {p.get('name', ''):<18} {p['status']:<16} اسکن: {scan}")
+
+    tg = json.loads(TELEGRAM_PATH.read_text(encoding="utf-8"))
+    print("\n== کانال‌های تلگرام ==")
+    for ch in tg["channels"]:
+        scan = "فعال" if ch.get("scan_enabled") else "غیرفعال"
+        print(f"@{ch['username']:<21} {ch.get('status', '?'):<14} اسکن: {scan}")
+    print("\nبرای فعال کردن: python -m scanner.konklancer_scan enable --telegram <username>")
     return 0
+
+
+def _load_json(path: Path) -> dict:
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def _save_json(path: Path, data: dict) -> None:
+    path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+
+def cmd_toggle(args) -> int:
+    """فعال/غیرفعال کردن اسکن یک پلتفرم یا یک کانال تلگرام (فقط یک فلگ در فایل‌های رجیستری).
+
+    برای پلتفرم، فعال‌سازی بدون انتخابگر CSS بی‌معنی است و رد می‌شود؛ روند کالیبراسیون
+    در scanner/README.md توضیح داده شده است.
+    """
+    enable = args.cmd == "enable"
+    if bool(args.platform) == bool(args.telegram):
+        raise SystemExit("دقیقاً یکی از --platform یا --telegram را بدهید.")
+
+    if args.platform:
+        data = _load_json(REGISTRY_PATH)
+        for platform in data["platforms"]:
+            if platform["id"] != args.platform:
+                continue
+            if enable and not platform.get("scan_selectors"):
+                raise SystemExit(
+                    f"{platform['id']} انتخابگر CSS ندارد و فعال‌سازی بی‌فایده است. "
+                    "ابتدا snapshot بگیرید و scan_selectors را در platforms.json ثبت کنید "
+                    "(راهنما: scanner/README.md و docs/PERSONAL-SETUP.md)."
+                )
+            platform["scan_enabled"] = enable
+            _save_json(REGISTRY_PATH, data)
+            state = "فعال" if enable else "غیرفعال"
+            print(f"اسکن پلتفرم {platform['name']} ({platform['id']}) {state} شد.")
+            return 0
+        raise SystemExit(f"پلتفرم ناشناخته: {args.platform}")
+
+    data = _load_json(TELEGRAM_PATH)
+    for channel in data["channels"]:
+        if channel["username"] != args.telegram:
+            continue
+        channel["scan_enabled"] = enable
+        _save_json(TELEGRAM_PATH, data)
+        state = "فعال" if enable else "غیرفعال"
+        print(f"اسکن کانال @{channel['username']} {state} شد.")
+        return 0
+    raise SystemExit(f"کانال ناشناخته: {args.telegram}")
 
 
 def cmd_snapshot(args) -> int:
@@ -317,6 +397,11 @@ def cmd_snapshot(args) -> int:
 
 
 def cmd_parse_file(args) -> int:
+    """تجزیه‌ی یک صفحه‌ی HTML محلی (مثلاً صفحه‌ای که خودتان در مرورگر ذخیره کرده‌اید).
+
+    با --out نتیجه در فید JSONL نوشته می‌شود؛ این مسیر به هیچ درخواست خودکاری به سایت نیاز ندارد
+    و برای راه‌اندازی شخصی، وقتی robots یا ضدربات اجازه‌ی اسکن خودکار نمی‌دهد، مناسب است.
+    """
     reg = load_registry()
     plat = get_platform(reg, args.platform)
     html = Path(args.html).read_text(encoding="utf-8")
@@ -331,6 +416,25 @@ def cmd_parse_file(args) -> int:
     for p in kept:
         print(f"- {p.title}  ->  {p.url}")
     print(f"{len(projects)} مورد تجزیه شد، {len(kept)} مورد پس از فیلتر.")
+    if args.out:
+        added = append_projects(Path(args.out), kept)
+        print(f"{added} مورد جدید در {args.out} نوشته شد.")
+    return 0
+
+
+def cmd_parse_telegram_file(args) -> int:
+    """پیش‌نمایش عمومی یک کانال را از فایل HTML محلی تجزیه می‌کند (t.me/s/<username>)."""
+    html = Path(args.html).read_text(encoding="utf-8")
+    include = [x.strip() for x in args.include.split(",") if x.strip()]
+    exclude = [x.strip() for x in args.exclude.split(",") if x.strip()]
+    projects = parse_telegram_preview(html, args.channel)
+    kept = [p for p in projects if matches(p, include, exclude)]
+    for p in kept:
+        print(f"- {p.title}  ->  {p.url}")
+    print(f"{len(projects)} پیام تجزیه شد، {len(kept)} مورد پس از فیلتر.")
+    if args.out:
+        added = append_projects(Path(args.out), kept)
+        print(f"{added} مورد جدید در {args.out} نوشته شد.")
     return 0
 
 
@@ -382,20 +486,38 @@ def build_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(description="konklancer read-only project scanner")
     sub = ap.add_subparsers(dest="cmd", required=True)
 
-    sub.add_parser("list", help="نمایش وضعیت پلتفرم‌ها").set_defaults(fn=cmd_list)
+    sub.add_parser("list", help="نمایش وضعیت پلتفرم‌ها و کانال‌های تلگرام").set_defaults(fn=cmd_list)
+
+    for name, help_text in (
+        ("enable", "فعال کردن اسکن یک پلتفرم (پس از کالیبراسیون) یا یک کانال تلگرام"),
+        ("disable", "غیرفعال کردن اسکن یک پلتفرم یا یک کانال تلگرام"),
+    ):
+        toggle = sub.add_parser(name, help=help_text)
+        toggle.add_argument("--platform", default="", help="شناسه پلتفرم در platforms.json")
+        toggle.add_argument("--telegram", default="", help="نام کاربری کانال بدون @")
+        toggle.set_defaults(fn=cmd_toggle)
 
     s = sub.add_parser("snapshot", help="ذخیره یک صفحه لیست برای کالیبره کردن")
     s.add_argument("--platform", required=True)
     s.add_argument("--delay", type=float, default=8.0)
     s.set_defaults(fn=cmd_snapshot)
 
-    p = sub.add_parser("parse-file", help="تجزیه یک فایل HTML محلی (تست آفلاین)")
+    p = sub.add_parser("parse-file", help="تجزیه یک فایل HTML محلی (تست آفلاین یا صفحه‌ی ذخیره‌شده در مرورگر)")
     p.add_argument("--platform", required=True)
     p.add_argument("--html", required=True)
     p.add_argument("--selectors-json", default="", help="انتخابگرها به‌صورت JSON (اختیاری)")
     p.add_argument("--include", default="")
     p.add_argument("--exclude", default="")
+    p.add_argument("--out", default="", help="مسیر فید JSONL برای نوشتن نتیجه (اختیاری)")
     p.set_defaults(fn=cmd_parse_file)
+
+    pt = sub.add_parser("parse-telegram-file", help="تجزیه پیش‌نمایش عمومی یک کانال از فایل HTML محلی")
+    pt.add_argument("--channel", required=True, help="نام کاربری کانال بدون @")
+    pt.add_argument("--html", required=True)
+    pt.add_argument("--include", default="")
+    pt.add_argument("--exclude", default="")
+    pt.add_argument("--out", default="", help="مسیر فید JSONL برای نوشتن نتیجه (اختیاری)")
+    pt.set_defaults(fn=cmd_parse_telegram_file)
 
     sc = sub.add_parser("scan", help="اسکن صفحات عمومی")
     sc.add_argument("--platform", default="")

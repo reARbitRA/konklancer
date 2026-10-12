@@ -41,9 +41,25 @@ npm start                        # http://localhost:3000
 | `npm run lint` | بررسی نوع‌ها با `tsc --noEmit` |
 | `npm test` | تست‌های سرور و کلاینت gateway (Node) |
 | `npm run test:scanner` | تست‌های آفلاین اسکنر (Python) |
+| `npm run scan` | یک اسکن فقط‌خواندنی طبق تنظیمات `.env` (`KONKLANCER_SCAN_*`) |
 
-## اسکنر پروژه (فقط‌خواندنی)
+## اسکنر پروژه (فقط‌خواندنی) و فید واقعی
 پوشه `scanner/` پروژه‌های عمومی پلتفرم‌ها و کانال‌های تلگرام را می‌خواند و در `scanner/out/projects.jsonl` ذخیره می‌کند. جزئیات، قواعد ایمنی و مراحل کالیبراسیون در [scanner/README.md](scanner/README.md) است.
+
+`GET /api/jobs` همان خروجی اسکنر را به‌صورت فید UI برمی‌گرداند (`source: "scanner"`)، هر پروژه یک
+امتیاز پیش‌فیلتر ۰ تا ۱۰۰ می‌گیرد و `POST /api/bridge/trigger-scan` یک اسکن واقعی (با قفل) اجرا و
+پروژه‌های تازه را با Socket.io به UI پوش می‌کند. اگر فایل اسکنر خالی باشد، UI **هیچ داده‌ی ساختگی
+نشان نمی‌دهد** (حالت دمو فقط با `KONKLANCER_DEMO=1`).
+
+### راه‌اندازی برای استفاده‌ی شخصی
+گام‌به‌گام (نصب، موتور AI، فعال‌کردن تلگرام یا یک پلتفرم، اسکن دوره‌ای، تنظیم سلیقه و عیب‌یابی):
+**[docs/PERSONAL-SETUP.md](docs/PERSONAL-SETUP.md)**.
+
+```bash
+python -m scanner.konklancer_scan list                       # چه چیزی اسکن‌شدنی است؟
+python -m scanner.konklancer_scan enable --telegram workarc  # سریع‌ترین منبع: کانال عمومی تلگرام
+# .env → KONKLANCER_SCAN_TELEGRAM="1"   سپس دکمه‌ی «اسکن زنده» در UI
+```
 
 ## وضعیت پروژه و قواعد
 - هر تغییر باید به یک spec تاییدشده در `specs/` وصل باشد (ببینید `AGENTS.md`).
@@ -51,7 +67,7 @@ npm start                        # http://localhost:3000
 - `freelance_pro_engine.py` قدیمی است و اجرا نمی‌شود.
 
 ## محدودیت‌های فعلی
-- اتصال خروجی اسکنر به `/api/jobs` هنوز انجام نشده (SPEC-004).
+- انتخابگر CSS هیچ پلتفرمی کالیبره نشده؛ تا آن زمان فقط کانال‌های تلگرام (یا داده‌ی محلی) اسکن می‌شوند (SPEC-004 R3).
 - احراز هویت برای `/api/*` هنوز اضافه نشده (SPEC-003 R5).
 - پیش‌فیلتر قانون‌محور قبل از تماس AI هنوز نیست (SPEC-004 R5).
 - ذخیره‌سازی داده در مرورگر (localStorage) است؛ SQLite هنوز نیست.
