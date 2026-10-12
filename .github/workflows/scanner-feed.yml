@@ -1,0 +1,145 @@
+name: scanner-feed
+
+# اسکن واقعی سایت‌های فریلنسری روی رانرهای گیت‌هاب.
+#
+# چرا اینجا؟ چون محیط توسعه/مرورگر به پارس‌کدرز، پونیشا، کارلنسر و t.me دسترسی TCP ندارد
+# (خطای HTTP 000 در سطح شبکه). رانر گیت‌هاب اینترنت آزاد دارد، پس همان اسکنر واقعی مخزن
+# (`scanner/konklancer_scan.py`) اینجا اجرا می‌شود: robots.txt رعایت می‌شود، ۸ ثانیه بین
+# درخواست‌ها فاصله می‌گذارد و ساختار صفحه در همان لحظه از خود DOM کشف می‌شود.
+#
+# خروجی (artifact به نام feed): فایل JSONL فید + platforms.json کالیبره‌شده + گزارش عیب‌یابی.
+# سرور محلی با `gh run download` همین artifact را برمی‌دارد و در UI نشان می‌دهد.
+
+on:
+  workflow_dispatch:
+    inputs:
+      platforms:
+        description: 'شناسه‌ی پلتفرم‌ها با کاما'
+        default: 'parscoders,ponisha,karlancer'
+        required: false
+      pages:
+        description: 'تعداد صفحه از هر پلتفرم'
+        default: '1'
+        required: false
+      delay:
+        description: 'فاصله بین درخواست‌ها (ثانیه)'
+        default: '8'
+        required: false
+      telegram:
+        description: 'کانال‌های تلگرام هم اسکن شوند؟ (1/0)'
+        default: '1'
+        required: false
+  # زمان‌بندی فقط وقتی فعال می‌شود که این فایل روی برنچ پیش‌فرض باشد.
+  schedule:
+    - cron: '23 */3 * * *'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: scanner-feed
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      PLATFORMS: ${{ inputs.platforms || 'parscoders,ponisha,karlancer' }}
+      PAGES: ${{ inputs.pages || '1' }}
+      DELAY: ${{ inputs.delay || '8' }}
+      TELEGRAM: ${{ inputs.telegram || '1' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: نصب پیش‌نیازهای اسکنر
+        run: python -m pip install --quiet --upgrade pip httpx beautifulsoup4
+
+      - name: تست‌های آفلاین اسکنر (قبل از هر تماس شبکه‌ای)
+        run: python -m pytest -q scanner/tests
+
+      - name: عیب‌یابی ارتباط (robots.txt و کد پاسخ هر میزبان)
+        run: |
+          mkdir -p scanner/out
+          : > scanner/out/diagnostics.txt
+          for host in parscoders.com ponisha.ir www.karlancer.com t.me; do
+            {
+              echo "=== $host ==="
+              echo -n "robots.txt: "
+              curl -s -o /tmp/robots.txt -w '%{http_code}\n' --max-time 20 "https://$host/robots.txt" || echo "curl-failed"
+              head -c 400 /tmp/robots.txt 2>/dev/null || true
+              echo
+            } | tee -a scanner/out/diagnostics.txt
+          done
+
+      - name: اسکن واقعی صفحات زنده (کشف خودکار ساختار)
+        run: |
+          python -m scanner.konklancer_scan autoscan \
+            --platform "$PLATFORMS" \
+            --pages "$PAGES" \
+            --delay "$DELAY" \
+            --min-count 3 \
+            --save \
+            --out scanner/out/projects.jsonl 2>&1 | tee -a scanner/out/diagnostics.txt
+
+      - name: اسکن کانال‌های عمومی تلگرام
+        if: ${{ env.TELEGRAM == '1' }}
+        run: |
+          python - <<'PY' | tee -a scanner/out/diagnostics.txt
+          import json, pathlib
+          p = pathlib.Path('scanner/telegram_sources.json')
+          data = json.loads(p.read_text(encoding='utf-8'))
+          for channel in data['channels']:
+              channel['scan_enabled'] = True
+          p.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding='utf-8')
+          print("کانال‌های تلگرام برای این اجرا فعال شدند:", [c['username'] for c in data['channels']])
+          PY
+          python -m scanner.konklancer_scan scan --telegram --delay "$DELAY" \
+            --out scanner/out/projects.jsonl 2>&1 | tee -a scanner/out/diagnostics.txt
+
+      - name: خلاصه‌ی نتیجه
+        if: always()
+        run: |
+          FEED=scanner/out/projects.jsonl
+          COUNT=0
+          [ -f "$FEED" ] && COUNT=$(grep -c . "$FEED" || true)
+          {
+            echo "### نتیجه‌ی اسکن زنده"
+            echo ""
+            echo "- پلتفرم‌ها: \`$PLATFORMS\` (صفحه: $PAGES، فاصله: ${DELAY}s)"
+            echo "- پروژه‌های موجود در فید: **$COUNT**"
+            echo ""
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ -f "$FEED" ] && [ "$COUNT" -gt 0 ]; then
+            {
+              echo "| دسته | عنوان | بودجه | منبع |"
+              echo "|---|---|---|---|"
+              python - "$FEED" <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import json, sys, collections
+          rows = [json.loads(line) for line in open(sys.argv[1], encoding='utf-8') if line.strip()]
+          labels = {r.get('category', '') for r in rows}
+          hist = collections.Counter(r.get('category', 'other') for r in rows)
+          print('| ' + ' | '.join(f"{k}: {v}" for k, v in hist.most_common()) + ' | — | — |')
+          for row in rows[:15]:
+              title = str(row.get('title', ''))[:60].replace('|', '/')
+              print(f"| {row.get('category','')} | {title} | {row.get('budget_text','')} | {row.get('source','')} |")
+          PY
+            } >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "فید خالی است — گزارش عیب‌یابی artifact را ببینید." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: بارگذاری artifact فید
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: feed
+          path: |
+            scanner/out/projects.jsonl
+            scanner/out/diagnostics.txt
+            scanner/platforms.json
+          if-no-files-found: warn
+          retention-days: 14
