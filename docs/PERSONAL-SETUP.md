@@ -267,6 +267,22 @@ curl -s      localhost:3000/api/bridge/cloud           | jq .   # وضعیت آ�
 | `scanner/cloud-status.json` | وضعیت و خلاصه‌ی عیب‌یابی (کد پاسخ هر میزبان، تعداد هر دسته) |
 | `scanner/tests/fixtures/live/*.html.gz` | نمونه‌ی HTML واقعی سایت‌ها برای کالیبراسیون و تست آفلاین |
 
+**پاک‌سازی فید و ردیف‌های زباله**
+
+اگر فیدی از قبل مانده و ردیف‌های بی‌ربط (منو، «خانه»، صفحه‌ی دسته‌بندی، کانال غیرفعال) در آن هست:
+
+```bash
+python -m scanner.konklancer_scan prune --file scanner/cloud-feed.jsonl          # فقط گزارش
+python -m scanner.konklancer_scan prune --file scanner/cloud-feed.jsonl --apply  # پاک‌سازی
+```
+
+همین پاک‌سازی در هر اجرای ورک‌فلوی ابری هم خودکار انجام می‌شود (دسته‌ی «نشانی‌های غیرپروژه»).
+
+**اگر گواهی TLS سرور شما سفارشی است** (پروکسی سازمانی/سندباکس) و `fetch` نود خطای
+«unable to verify the first certificate» می‌دهد: سرور را با `NODE_EXTRA_CA_CERTS=/path/to/ca.crt`
+اجرا کنید. اگر این هم ممکن نبود، خودِ سرور به‌صورت خودکار همان درخواست را با CLI رسمی `gh api`
+انجام می‌دهد؛ روشِ استفاده‌شده در `GET /api/bridge/cloud` زیر کلید `transport` گزارش می‌شود.
+
 محدودیت‌های همین مسیر (صادقانه):
 
 - رانر گیت‌هاب IP خارج از ایران دارد؛ سایت‌هایی که به IP خارجی سخت می‌گیرند (پارس‌کدرز در اجرای ما
