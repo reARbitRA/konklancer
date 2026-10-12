@@ -23,7 +23,7 @@
     "verified_selectors": {
       "karlancer": "https://www.karlancer.com/projects (۲۴ کارت واقعی)",
       "ponisha": "https://ponisha.ir/projects (۲۰ پروژه‌ی یکتا)",
-      "parscoders": "هنوز تأیید نشده — صفحه در اجرای رانر تایم‌اوت داد؛ با KONKLANCER_HTTP_TIMEOUT=45 دوباره تلاش می‌شود"
+      "parscoders": "https://parscoders.com/project/only-available (۲۵ پروژه‌ی یکتا) — تأیید شد"
     },
     "project_path_pattern": "قاعده‌ی «پروژه بودن» به‌ازای هر پلتفرم؛ در parse_listing و prune اعمال می‌شود."
   },
@@ -468,7 +468,7 @@
       "status": "active",
       "commission_freelancer": "۱۵٪ (رایگان و برنزی)، ۱۰٪ (نقره‌ای و طلایی)، حداقل ۱۵۰۰ تومان — تعرفه رسمی",
       "public_stats": "۲۰۹ هزار پروژه موفق؛ ۸۰۳ هزار متخصص؛ ۱۳۶ هزار کارفرمای راضی؛ ۱۸ سال سابقه",
-      "listing_url": "https://parscoders.com/project/only-available/{page}",
+      "listing_url": "https://parscoders.com/project/only-available",
       "robots": "/api/، /dashboard/، /anonymous-project/ ممنوع‌اند؛ مسیر /project/ ممنوع نشده",
       "scan_enabled": false,
       "sources": [
@@ -477,8 +477,8 @@
         "https://parscoders.com/robots.txt"
       ],
       "listing_url_candidates": [
-        "https://parscoders.com/projects",
-        "https://parscoders.com/project/only-available"
+        "https://parscoders.com/project/only-available",
+        "https://parscoders.com/projects"
       ],
       "scan_selectors_candidates": [
         {
@@ -693,10 +693,30 @@
         }
       ],
       "notes": {
-        "calibration": "انتخابگرها تأییدنشده‌اند. `probe` نامزدها را روی صفحه‌ی زنده امتحان می‌کند و `autodetect/autoscan` ساختار واقعی را از خود HTML یاد می‌گیرد؛ `scan --auto` هم در زمان اجرا خودکار کشف می‌کند. robots.txt پیش از فعال‌سازی دستی بازبینی شود.",
+        "calibration": "انتخابگرها با نمونه‌ی واقعی تأیید شدند. صفحه‌ی پیش‌فرض /project (بدون only-available) از IP ابری ۴۰۴ می‌دهد؛ مسیر only-available پایدارتر بود. لینک‌های /project/skills/... دسته‌بندی مهارت‌اند و با الگوی ^/project/\\d+/ حذف می‌شوند.",
         "project_path_pattern": "هر ردیف معتبر باید مسیرش با ^/project/ بخورد؛ صفحه‌های دسته‌بندی مثل /translation یا /web-design و صفحه‌های /hire/… پروژه نیستند (باگ دیده‌شده در فید واقعی)."
       },
-      "project_path_pattern": "^/project/"
+      "project_path_pattern": "^/project/\\d+(/|$)",
+      "scan_selectors": {
+        "item": "div.project-list-item",
+        "title": "a.project--link",
+        "link": "a.project--link",
+        "summary": "div.project-text",
+        "budget": "div.ms-1.font-small-3",
+        "bids": "div.text-secondary.font-small-3",
+        "posted": "div.text-secondary.font-small-3"
+      },
+      "scan_selectors_verified": {
+        "verified": true,
+        "verified_at": "2026-10-12",
+        "method": "تأییدشده روی صفحه‌ی واقعی https://parscoders.com/project/only-available (۲۵ کارت، نمونه در scanner/tests/fixtures/live/parscoders.html.gz)",
+        "observed": {
+          "cards": 25,
+          "unique_projects": 25,
+          "with_budget": 25,
+          "note": "بودجه در div.ms-1.font-small-3؛ زمان+تعداد پیشنهاد در یک گره‌ی مشترک (div.text-secondary.font-small-3) — برای همین هر دو فیلد به آن اشاره می‌کنند."
+        }
+      }
     },
     {
       "id": "typeiran",

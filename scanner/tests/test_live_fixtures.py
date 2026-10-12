@@ -16,6 +16,7 @@ import pytest
 from scanner import konklancer_scan as ks
 
 LIVE = Path(__file__).parent / "fixtures" / "live"
+NAV_TITLES = {"خانه", "ورود", "ورود به کارلنسر", "ثبت پروژه رایگان"}
 
 
 def live_text(name: str) -> str:
@@ -84,6 +85,32 @@ def test_registry_selectors_match_the_verified_values():
         platform = ks.get_platform(registry, platform_id)
         assert platform.get("scan_selectors", {}).get("item") == item_selector
         assert platform.get("scan_selectors_verified", {}).get("verified") is True
+
+
+def test_parscoders_verified_selectors_parse_real_listing():
+    """پارس‌کدرز: بودجه، تعداد پیشنهاد و زمان در دو گره‌ی متفاوت‌اند (نه همه در یک کارت)."""
+    registry = ks.load_registry()
+    platform = ks.get_platform(registry, "parscoders")
+    selectors = platform.get("scan_selectors") or {}
+    items = ks.parse_listing(
+        live_text("parscoders"),
+        platform["listing_url"],
+        "parscoders",
+        selectors,
+        platform.get("project_path_pattern"),
+    )
+    assert len(items) == 25, f"انتظار ۲۵ پروژه‌ی یکتا، دریافت {len(items)}"
+    assert len({item.url for item in items}) == len(items)
+    assert all(re.match(r"^/project/\d+/", urlpath(item.url)) for item in items), "مسیرهای /project/skills/ نباید پروژه حساب شوند"
+    assert all("بودجه" in item.budget_text for item in items)
+    assert all("پیشنهاد" in item.bids_text for item in items)
+    assert not NAV_TITLES & {item.title for item in items}
+
+
+def urlpath(url: str) -> str:
+    from urllib.parse import urlparse
+
+    return urlparse(url).path
 
 
 def test_telegram_titles_are_meaningful_not_emoji():
