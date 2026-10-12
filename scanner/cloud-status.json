@@ -1,25 +1,13 @@
 {
-  "phase": "finished",
-  "job_status": "success",
-  "run_url": "https://github.com/reARbitRA/konklancer/actions/runs/38295148014",
-  "finished_at": "2026-10-12T19:08:21+00:00",
-  "projects_this_run": 38,
-  "by_category": {
-    "automation": 6,
-    "other": 7,
-    "graphic": 2,
-    "data": 3,
-    "docs": 4,
-    "writing": 3,
-    "dev": 8,
-    "translation": 3,
-    "audio": 1,
-    "marketing": 1
+  "phase": "started",
+  "run_url": "https://github.com/reARbitRA/konklancer/actions/runs/38295997675",
+  "started_at": "2026-10-12T19:11:47+00:00",
+  "request": {
+    "platforms": "parscoders,ponisha,karlancer",
+    "pages": 1,
+    "delay": 8,
+    "telegram": 1
   },
-  "by_source": {
-    "telegram:workarc": 18,
-    "telegram:freelancer_projects": 20
-  },
-  "diagnostics": "=== parscoders.com ===\nrobots.txt -> 200\nصفحه اصلی -> 000 (0 bytes)\ncurl-failed\nrobots (۳۰۰ کاراکتر اول):\nUser-agent: *\nDisallow: /admin/\nDisallow: /login/\nDisallow: /logout/\nDisallow: /register/\nDisallow: /reset-password/\nDisallow: /cellphone/register\nDisallow: /connect-*\nDisallow: /dashboard/\nDisallow: /conversation/\nDisallow: /api/\nDisallow: /anonymous-project/\n\nSitemap: https://parscoders.com/sitema\nسربرگ‌ها:\n\n=== ponisha.ir ===\nrobots.txt -> 404\nصفحه اصلی -> 200 (608409 bytes)\nrobots (۳۰۰ کاراکتر اول):\n<!DOCTYPE html><html lang=\"fa\" dir=\"rtl\"><head><meta charSet=\"utf-8\" data-next-head=\"\"/><meta name=\"viewport\" content=\"minimum-scale=1, initial-scale=1, width=device-width, shrink-to-fit=no, user-scalable=no, viewport-fit=cover\" data-next-head=\"\"/><title data-next-head=\"\">صفحه مورد نظر ی\nسربرگ‌ها:\nHTTP/2 200 \nx-nextjs-cache: HIT\nx-powered-by: Next.js\ncontent-type: text/html; charset=utf-8\nx-envoy-upstream-service-time: 19\nserver: istio-envoy\n\n=== www.karlancer.com ===\nrobots.txt -> 200\nصفحه اصلی -> 200 (503360 bytes)\nrobots (۳۰۰ کاراکتر اول):\nUser-agent: *\n\nDisallow: /panel/\nDisallow: /404\nDisallow: /500\nDisallow: /freelancer?q=*\nDisallow: /edu/search?q=*\nDisallow: /search?q=*\nDisallow: /services?q=*\nDisallow: /worksample?q=*\nDisallow: /api/file/workdiary/*\nDisallow: /external-payment/*\nDisallow: /external-charge/*\n\nAllow: /api/file*\n\n#S\nسربرگ‌ها:\nHTTP/2 200 \nserver: nginx\ncontent-type: text/html; charset=utf-8\nx-frame-options: DENY\nx-l: front\n\n=== t.me ===\nrobots.txt -> 404\nصفحه اصلی -> 302 (0 bytes)\nrobots (۳۰۰ کاراکتر اول):\n<html>\n<head><title>404 Not Found</title></head>\n<body>\n<center><h1>404 Not Found</h1></center>\n<hr><center>nginx/1.30.1</center>\n</body>\n</html>\n\nسربرگ‌ها:\nHTTP/2 302 \nserver: nginx/1.30.1\ncontent-type: text/html; charset=UTF-8\n\n[parscoders] صفحه 1 خوانده نشد — خطای HTTP: The read operation timed out\n[ponisha] صفحه 1 خوانده نشد — خطای HTTP: Client error '404 Not Found' for url 'https://ponisha.ir/projects'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/404\n[karlancer] صفحه 1 خوانده نشد — خطای HTTP: Client error '404 Not Found' for url 'https://www.karlancer.com/projects'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/404\n0 مورد خوانده شد؛ 0 پس از فیلتر؛ 0 مورد جدید در scanner/out/projects.jsonl\nکانال‌های فعال برای اسکن: ['workarc', 'freelancer_projects']\n@workarc: 18 پیام\n@freelancer_projects: 20 پیام\n38 مورد خوانده شد؛ 38 پس از فیلتر؛ 38 مورد جدید در scanner/out/projects.jsonl\n[parscoders] ذخیره نشد — خطای HTTP: The read operation timed out\n[ponisha] ذخیره نشد — خطای HTTP: Client error '404 Not Found' for url 'https://ponisha.ir/projects'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/404\n[karlancer] ذخیره نشد — خطای HTTP: Client error '404 Not Found' for url 'https://www.karlancer.com/projects'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/404\n[project-only-available] ذخیره نشد — خطای HTTP: The read operation timed out\n[telegram-workarc] ذخیره شد: telegram-workarc.html.gz (128901 کاراکتر → 19266 بایت فشرده)\n[telegram-freelancer_projects] ذخیره شد: telegram-freelancer_projects.html.gz (102538 کاراکتر → 10519 بایت فشرده)\n[telegram-freelancer_sent] ذخیره شد: telegram-freelancer_sent.html.gz (125747 کاراکتر → 17788 بایت فشرده)\n[telegram-iranfiverr] ذخیره شد: telegram-iranfiverr.html.gz (134654 کاراکتر → 25714 بایت فشرده)\n4 نمونه ذخیره شد. فهرست: scanner/tests/fixtures/live/manifest.json\n",
-  "note": "فید واقعی از اجرای اسکنر روی رانر گیت‌هاب؛ هیچ داده‌ی ساختگی در آن نیست."
+  "projects_in_feed": 0,
+  "note": "اسکن واقعی روی رانر گیت‌هاب؛ این فایل خودش نشان می‌دهد اجرا شروع شده است."
 }
