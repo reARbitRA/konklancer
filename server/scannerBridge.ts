@@ -852,7 +852,9 @@ export async function requestCloudScan(
     method: 'PUT',
     headers: { ...ghHeaders(config), 'content-type': 'application/json' },
     body: JSON.stringify({
-      message: 'data(scan): درخواست اسکن زنده از کنکلنسر [skip ci]',
+      // نکته‌ی باگ‌یافته: پیام کامیت نباید `[skip ci]` داشته باشد، وگرنه گیت‌هاب ورک‌فلو
+      // اسکن را اصلاً اجرا نمی‌کند و دکمه‌ی «اسکن ابری» بی‌اثر می‌شود.
+      message: 'data(scan): درخواست اسکن زنده از کنکلنسر',
       content: Buffer.from(JSON.stringify(next, null, 2) + '\n', 'utf8').toString('base64'),
       branch: config.ref || undefined,
       sha: existing?.sha || undefined,

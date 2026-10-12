@@ -23,6 +23,7 @@ import {
   runScanner,
   scannerBusy,
   type FeedJob,
+  cloudTransport,
 } from './server/scannerBridge';
 
 dotenv.config();
@@ -475,6 +476,8 @@ app.get('/api/bridge/cloud', async (_req: Request, res: Response) => {
       ref: CLOUD_CONFIG.ref,
       hasToken: Boolean(CLOUD_CONFIG.token),
       cloudProjects: feedText ? feedText.split('\n').filter(Boolean).length : 0,
+      // روشی که واقعاً استفاده شد: fetch نود یا CLI گیت‌هاب (محیط‌های با گواهی سفارشی)
+      transport: cloudTransport(),
       status,
     });
   } catch (error: any) {
@@ -566,6 +569,8 @@ app.get('/api/jobs', (_req: Request, res: Response) => {
       scannedProjects: projects.length,
       minScore: SCAN_CONFIG.minScore,
       categories: SCAN_CONFIG.categories,
+      // همه‌ی دسته‌های تاکسونومی (سطح داده، نه فیلتر) تا UI بتواند هر نوع کاری را نشان دهد.
+      availableCategories: describeCategories(),
       // وقتی فهرست دسته خالی است، هیچ دسته‌ای حذف نمی‌شود (شامل کارهای غیرکدنویسی).
       categoryFilter: SCAN_CONFIG.categories.length > 0 ? 'explicit' : 'all',
       jobs,
