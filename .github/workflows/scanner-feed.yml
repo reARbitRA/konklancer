@@ -190,25 +190,6 @@ jobs:
               json.dumps(status, ensure_ascii=False, indent=2) + "\n", encoding='utf-8')
 
           # قواعد پاکسازی: ردیف منو/فوتر و کانال‌های غیرفعال نباید در فید بمانند
-          import sys
-          sys.path.insert(0, '.')
-          from scanner.konklancer_scan import _looks_like_nav_item
-
-          enabled_channels = set()
-          tg = pathlib.Path('scanner/telegram_sources.json')
-          if tg.exists():
-              for channel in json.loads(tg.read_text(encoding='utf-8')).get('channels', []):
-                  if channel.get('scan_enabled'):
-                      enabled_channels.add(f"telegram:{channel['username']}")
-
-          def keep(row):
-              source = row.get('source', '')
-              if _looks_like_nav_item(row.get('url', ''), row.get('title', '')):
-                  return False
-              if source.startswith('telegram:') and enabled_channels and source not in enabled_channels:
-                  return False
-              return True
-
           cloud = pathlib.Path('scanner/cloud-feed.jsonl')
           seen = {}
           if cloud.exists():
@@ -222,12 +203,19 @@ jobs:
                   seen[row.get("id")] = row
           for row in rows:
               seen[row.get("id")] = row
-          merged = [row for row in seen.values() if keep(row)]
-          merged = sorted(merged, key=lambda r: r.get("scraped_at") or "")
+          merged = sorted(seen.values(), key=lambda r: r.get("scraped_at") or "")
           # سقف نگه‌داری: آخرین ۱۵۰۰ رکورد تا فایل از سقف خواندن contents API (۱ مگابایت) رد نشود
           merged = merged[-1500:]
           cloud.write_text("".join(json.dumps(r, ensure_ascii=False) + "\n" for r in merged), encoding='utf-8')
-          print(f"این اجرا: {len(rows)} رکورد · فید ابری: {len(merged)} رکورد")
+          print(f"fid ebraei ghabl az pak-sazi: {len(merged)} record")
+          PY
+
+          # پاک‌سازی با همان قواعد خود اسکنر (ناوبری، الگوی مسیر پروژه، کانال غیرفعال، تکراری)
+          python -m scanner.konklancer_scan prune --file scanner/cloud-feed.jsonl --apply | tee -a scanner/out/diagnostics.txt
+          python - <<'PY'
+          import pathlib
+          lines = [line for line in pathlib.Path('scanner/cloud-feed.jsonl').read_text(encoding='utf-8').splitlines() if line.strip()]
+          print(f"fid ebraei pas az pak-sazi: {len(lines)} record")
           PY
 
           git config user.name "konklancer-scan-bot"

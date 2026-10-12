@@ -11,6 +11,10 @@
 
 import { spawn } from 'child_process';
 import { execFileSync } from 'child_process';
+import { execFile } from 'child_process';
+import { promisify } from 'util';
+
+const execFileAsync = promisify(execFile);
 import fs from 'fs';
 import path from 'path';
 
@@ -643,6 +647,82 @@ export function readCloudFeedConfig(
   };
 }
 
+// ---------------------------------------------------------------------------
+// دسترسی به GitHub API — با پشتیبان `gh`
+// ---------------------------------------------------------------------------
+// چرا: در بعضی محیط‌ها (سندباکس، پروکسی سازمانی، گواهی TLS سفارشی) `fetch` نود با خطای
+// «unable to verify the first certificate» شکست می‌خورد، در حالی که `gh` سالم کار می‌کند.
+// در آن حالت‌ها همان درخواست با `gh api` انجام می‌شود تا «اسکن ابری» واقعاً کار کند.
+// در محیط عادی (بدون مشکل گواهی) مسیر از ابتدا `fetch` است و gh اصلاً صدا زده نمی‌شود.
+
+export type CloudTransport = 'node-fetch' | 'gh-cli';
+
+let lastTransport: CloudTransport | null = null;
+
+/** آخرین روش ارتباطی موفق با GitHub (برای نمایش در وضعیت/عیب‌یابی). */
+export const cloudTransport = (): CloudTransport | null => lastTransport;
+
+function responseLike(status: number, body: string): Response {
+  return {
+    ok: status >= 200 && status < 300,
+    status,
+    json: async () => JSON.parse(body || 'null'),
+    text: async () => body,
+  } as unknown as Response;
+}
+
+/** همان درخواست، این‌بار از طریق CLI رسمی گیت‌هاب. */
+async function viaGhCli(url: string, init: RequestInit): Promise<Response | null> {
+  const marker = `/repos/`;
+  const index = url.indexOf(marker);
+  if (index === -1) return null;
+  const apiPath = url.slice(index + 1); // repos/<owner>/<repo>/...?ref=…
+  const method = (init.method ?? 'GET').toUpperCase();
+  const body = typeof init.body === 'string' ? init.body : undefined;
+  const args = ['api', apiPath, '-X', method];
+  if (body) args.push('-H', 'content-type: application/json', '--input', '-');
+  try {
+    const { stdout } = await new Promise<{ stdout: string }>((resolve, reject) => {
+      const child = execFile('gh', args, { timeout: 60_000, maxBuffer: 64 * 1024 * 1024 }, (error, stdout) => {
+        if (error) reject(Object.assign(error, { stdout })); else resolve({ stdout: String(stdout) });
+      });
+      if (body) {
+        child.stdin?.end(body);
+      }
+    });
+    lastTransport = 'gh-cli';
+    return responseLike(200, stdout);
+  } catch (error: any) {
+    const stderr = String(error?.stderr ?? error?.message ?? '');
+    const status = stderr.match(/HTTP (\d{3})/);
+    if (status) {
+      lastTransport = 'gh-cli';
+      return responseLike(Number(status[1]), stderr);
+    }
+    return null;
+  }
+}
+
+/** fetch با مسیر پشتیبان؛ اگر خطای گواهی/شبکه بود، `gh api` جایگزین می‌شود. */
+async function resilientFetch(url: string, init: RequestInit = {}): Promise<Response> {
+  try {
+    const res = await fetch(url, init);
+    lastTransport = 'node-fetch';
+    return res;
+  } catch (error: any) {
+    const message = String(error?.cause?.message ?? error?.message ?? error);
+    const recoverable = /certificate|unable to verify|self.signed|fetch failed|ECONNRESET|ETIMEDOUT/i.test(message);
+    if (!recoverable) throw error;
+    const fallback = await viaGhCli(url, init);
+    if (!fallback) throw error;
+    return fallback;
+  }
+}
+
+function resolveFetch(options: CloudFetchOptions = {}): typeof fetch {
+  return (options.fetchImpl ?? resilientFetch) as typeof fetch;
+}
+
 function ghHeaders(config: CloudFeedConfig): Record<string, string> {
   const headers: Record<string, string> = {
     accept: 'application/vnd.github+json',
@@ -662,7 +742,7 @@ async function ghGetFile(
   filePath: string,
   options: CloudFetchOptions = {},
 ): Promise<{ text: string; sha: string } | null> {
-  const doFetch = options.fetchImpl ?? fetch;
+  const doFetch = resolveFetch(options);
   const res = await doFetch(ghUrl(config, `contents/${filePath}`, config.ref), { headers: ghHeaders(config) });
   if (res.status === 404) return null;
   if (!res.ok) throw new Error(`GitHub API ${res.status} برای ${filePath}`);
@@ -757,7 +837,7 @@ export async function requestCloudScan(
   if (!config.token) {
     return { ok: false, message: 'توکن گیت‌هاب موجود نیست؛ GITHUB_TOKEN یا gh auth login لازم است.' };
   }
-  const doFetch = options.fetchImpl ?? fetch;
+  const doFetch = resolveFetch(options);
   const existing = await ghGetFile(config, config.requestPath, options);
   const current = existing ? (JSON.parse(existing.text || '{}') as Record<string, unknown>) : {};
   const next = {

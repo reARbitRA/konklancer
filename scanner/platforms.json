@@ -24,7 +24,8 @@
       "karlancer": "https://www.karlancer.com/projects (۲۴ کارت واقعی)",
       "ponisha": "https://ponisha.ir/projects (۲۰ پروژه‌ی یکتا)",
       "parscoders": "هنوز تأیید نشده — صفحه در اجرای رانر تایم‌اوت داد؛ با KONKLANCER_HTTP_TIMEOUT=45 دوباره تلاش می‌شود"
-    }
+    },
+    "project_path_pattern": "قاعده‌ی «پروژه بودن» به‌ازای هر پلتفرم؛ در parse_listing و prune اعمال می‌شود."
   },
   "platforms": [
     {
@@ -219,7 +220,8 @@
         }
       ],
       "notes": {
-        "calibration": "تأییدشده روی صفحه‌ی واقعی (2026-10-12، نمونه‌ی ذخیره‌شده در scanner/tests/fixtures/live/ که رانر گیت‌هاب گرفته است). اسکن با همین انتخابگرها کار می‌کند؛ اگر سایت ساختارش را عوض کرد، `probe`/`autoscan --save` انتخابگر تازه را پیدا و به‌روز می‌کند."
+        "calibration": "تأییدشده روی صفحه‌ی واقعی (2026-10-12، نمونه‌ی ذخیره‌شده در scanner/tests/fixtures/live/ که رانر گیت‌هاب گرفته است). اسکن با همین انتخابگرها کار می‌کند؛ اگر سایت ساختارش را عوض کرد، `probe`/`autoscan --save` انتخابگر تازه را پیدا و به‌روز می‌کند.",
+        "project_path_pattern": "هر ردیف معتبر باید مسیرش با ^/project/ بخورد؛ صفحه‌های دسته‌بندی مثل /translation یا /web-design و صفحه‌های /hire/… پروژه نیستند (باگ دیده‌شده در فید واقعی)."
       },
       "scan_selectors": {
         "item": "article",
@@ -237,7 +239,8 @@
           "unique_projects": 20,
           "with_bids": 20
         }
-      }
+      },
+      "project_path_pattern": "^/project/"
     },
     {
       "id": "karlancer",
@@ -432,7 +435,8 @@
         }
       ],
       "notes": {
-        "calibration": "تأییدشده روی صفحه‌ی واقعی (2026-10-12، نمونه‌ی ذخیره‌شده در scanner/tests/fixtures/live/ که رانر گیت‌هاب گرفته است). اسکن با همین انتخابگرها کار می‌کند؛ اگر سایت ساختارش را عوض کرد، `probe`/`autoscan --save` انتخابگر تازه را پیدا و به‌روز می‌کند."
+        "calibration": "تأییدشده روی صفحه‌ی واقعی (2026-10-12، نمونه‌ی ذخیره‌شده در scanner/tests/fixtures/live/ که رانر گیت‌هاب گرفته است). اسکن با همین انتخابگرها کار می‌کند؛ اگر سایت ساختارش را عوض کرد، `probe`/`autoscan --save` انتخابگر تازه را پیدا و به‌روز می‌کند.",
+        "project_path_pattern": "هر ردیف معتبر باید مسیرش با ^/projects/ بخورد؛ صفحه‌های دسته‌بندی مثل /translation یا /web-design و صفحه‌های /hire/… پروژه نیستند (باگ دیده‌شده در فید واقعی)."
       },
       "scan_selectors": {
         "item": "app-sidebar-project-card",
@@ -450,7 +454,8 @@
           "with_budget": 24,
           "with_posted": 24
         }
-      }
+      },
+      "project_path_pattern": "^/projects/"
     },
     {
       "id": "parscoders",
@@ -688,8 +693,10 @@
         }
       ],
       "notes": {
-        "calibration": "انتخابگرها تأییدنشده‌اند. `probe` نامزدها را روی صفحه‌ی زنده امتحان می‌کند و `autodetect/autoscan` ساختار واقعی را از خود HTML یاد می‌گیرد؛ `scan --auto` هم در زمان اجرا خودکار کشف می‌کند. robots.txt پیش از فعال‌سازی دستی بازبینی شود."
-      }
+        "calibration": "انتخابگرها تأییدنشده‌اند. `probe` نامزدها را روی صفحه‌ی زنده امتحان می‌کند و `autodetect/autoscan` ساختار واقعی را از خود HTML یاد می‌گیرد؛ `scan --auto` هم در زمان اجرا خودکار کشف می‌کند. robots.txt پیش از فعال‌سازی دستی بازبینی شود.",
+        "project_path_pattern": "هر ردیف معتبر باید مسیرش با ^/project/ بخورد؛ صفحه‌های دسته‌بندی مثل /translation یا /web-design و صفحه‌های /hire/… پروژه نیستند (باگ دیده‌شده در فید واقعی)."
+      },
+      "project_path_pattern": "^/project/"
     },
     {
       "id": "typeiran",

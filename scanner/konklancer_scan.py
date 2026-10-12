@@ -332,7 +332,24 @@ def _looks_like_nav_item(url: str, title: str) -> bool:
     return len(letters) < 5
 
 
-def parse_listing(html: str, base_url: str, source: str, selectors: dict) -> list[Project]:
+def _matches_project_path(url: str, pattern: str | None) -> bool:
+    """آیا مسیر این نشانی، مسیر یک «صفحه‌ی پروژه» است؟ (الگو از platforms.json می‌آید)"""
+    if not pattern:
+        return True
+    path = urlparse(url).path
+    try:
+        return re.search(pattern, path) is not None
+    except re.error:
+        return True
+
+
+def parse_listing(
+    html: str,
+    base_url: str,
+    source: str,
+    selectors: dict,
+    project_path_pattern: str | None = None,
+) -> list[Project]:
     """تجزیه‌گر عمومی بر اساس انتخابگرهای CSS که در platforms.json ثبت می‌شوند.
 
     کلیدهای الزامی: item, title. اختیاری: link, summary, budget, bids, posted.
@@ -353,7 +370,7 @@ def parse_listing(html: str, base_url: str, source: str, selectors: dict) -> lis
         if not title or not href:
             continue
         url = urljoin(base_url, href)
-        if url in seen_urls or _looks_like_nav_item(url, title):
+        if url in seen_urls or _looks_like_nav_item(url, title) or not _matches_project_path(url, project_path_pattern):
             continue
         seen_urls.add(url)
         projects.append(
@@ -492,6 +509,76 @@ def page_url(template: str, page: int) -> str:
 # ---------------------------------------------------------------------------
 # فرمان‌ها
 # ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# پاک‌سازی فید ذخیره‌شده
+# ---------------------------------------------------------------------------
+def cmd_prune(args) -> int:
+    """فید JSONL را از ردیف‌های بی‌ربط/تکراری پاک می‌کند (بدون تماس شبکه‌ای).
+
+    چرا: فید تجمیعی شامل ردیف‌هایی است که نسخه‌های قبلی اسکنر (با انتخابگر عمومی) گرفته‌اند —
+    مثلاً «خانه»، «ورود به کارلنسر» یا صفحه‌های `/hire/…`. اگر پاک نشوند، پروژه‌های واقعی و
+    زباله قاطی می‌شوند و کاربر فکر می‌کند اسکنر خراب است.
+    """
+    path = Path(args.file)
+    if not path.exists():
+        print(f"فایل موجود نیست: {path}")
+        return 1
+    registry = load_registry()
+    patterns = {
+        plat["id"]: plat.get("project_path_pattern")
+        for plat in registry.get("platforms", [])
+    }
+    # کانال‌های غیرفعال نباید در فید بمانند (مثلاً کانال آموزشی که پروژه ندارد)
+    enabled_channels: set[str] = set()
+    tg_path = Path(__file__).with_name("telegram_sources.json")
+    if tg_path.exists():
+        for channel in json.loads(tg_path.read_text(encoding="utf-8")).get("channels", []):
+            if channel.get("scan_enabled"):
+                enabled_channels.add(f"telegram:{channel['username']}")
+    rows: list[dict] = []
+    seen_ids: set[str] = set()
+    dropped_nav = 0
+    dropped_dup = 0
+    dropped_path = 0
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        try:
+            row = json.loads(line)
+        except json.JSONDecodeError:
+            dropped_nav += 1
+            continue
+        if _looks_like_nav_item(str(row.get("url", "")), str(row.get("title", ""))):
+            dropped_nav += 1
+            continue
+        source = str(row.get("source", ""))
+        if source.startswith("telegram:") and enabled_channels and source not in enabled_channels:
+            dropped_path += 1
+            continue
+        if not _matches_project_path(str(row.get("url", "")), patterns.get(source)):
+            dropped_path += 1
+            continue
+        row_id = str(row.get("id") or "")
+        if row_id and row_id in seen_ids:
+            dropped_dup += 1
+            continue
+        if row_id:
+            seen_ids.add(row_id)
+        rows.append(row)
+    rows.sort(key=lambda r: str(r.get("scraped_at") or ""))
+    total = len(rows) + dropped_nav + dropped_dup + dropped_path
+    print(
+        f"{total} ردیف خوانده شد؛ {dropped_nav} ناوبری، {dropped_path} خارج از الگوی پروژه/کانال غیرفعال و "
+        f"{dropped_dup} تکراری حذف شد؛ {len(rows)} ردیف ماند"
+    )
+    if getattr(args, "apply", False):
+        path.write_text("".join(json.dumps(r, ensure_ascii=False) + "\n" for r in rows), encoding="utf-8")
+        print(f"نوشته شد: {path}")
+    else:
+        print("(حالت آزمایشی — برای نوشتن --apply بدهید)")
+    return 0
+
+
 def cmd_list(_args) -> int:
     reg = load_registry()
     print("== پلتفرم‌ها ==")
@@ -678,7 +765,7 @@ def cmd_parse_file(args) -> int:
     if not selectors:
         raise SystemExit("انتخابگرها تعریف نشده‌اند؛ --selectors-json بدهید یا scan_selectors را در platforms.json ثبت کنید.")
     base = plat.get("listing_url") or f"https://{plat['domain']}/"
-    projects = parse_listing(html, base, plat["id"], selectors)
+    projects = parse_listing(html, base, plat["id"], selectors, plat.get("project_path_pattern"))
     include = [x.strip() for x in args.include.split(",") if x.strip()]
     exclude = [x.strip() for x in args.exclude.split(",") if x.strip()]
     kept = [p for p in projects if matches(p, include, exclude)]
@@ -763,7 +850,7 @@ def _scan_platform(
                 "انتخابگر CSS ثبت نشده است؛ با `autoscan --platform "
                 f"{plat['id']} --save` یا `probe --platform {plat['id']}` کالیبره کنید"
             )
-        collected += parse_listing(html, url, plat["id"], selectors)
+        collected += parse_listing(html, url, plat["id"], selectors, plat.get("project_path_pattern"))
     return collected, discovered_note
 
 
@@ -896,7 +983,7 @@ def cmd_probe(args) -> int:
             print(f"[خوانده شد] {target} ({len(html)} کاراکتر)")
             for label, selectors in profiles:
                 try:
-                    projects = parse_listing(html, target, plat["id"], selectors)
+                    projects = parse_listing(html, target, plat["id"], selectors, plat.get("project_path_pattern"))
                 except Exception as exc:  # انتخابگر نامعتبر نباید کل probe را بیندازد
                     print(f"   {label}: انتخابگر نامعتبر ({exc})")
                     continue
@@ -1045,7 +1132,7 @@ def cmd_autoscan(args) -> int:
                             json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
                         )
                         saved.append(plat["id"])
-                items = parse_listing(html, url, plat["id"], selectors)
+                items = parse_listing(html, url, plat["id"], selectors, plat.get("project_path_pattern"))
                 print(f"[{plat['id']}] صفحه {n}: {len(items)} پروژه")
                 collected += items
 
@@ -1068,6 +1155,11 @@ def build_parser() -> argparse.ArgumentParser:
     sub = ap.add_subparsers(dest="cmd", required=True)
 
     sub.add_parser("list", help="نمایش وضعیت پلتفرم‌ها و کانال‌های تلگرام").set_defaults(fn=cmd_list)
+
+    pp = sub.add_parser("prune", help="پاک‌سازی ردیف‌های بی‌ربط/تکراری از یک فید JSONL ذخیره‌شده")
+    pp.add_argument("--file", default="scanner/out/projects.jsonl", help="مسیر فید JSONL")
+    pp.add_argument("--apply", action="store_true", help="نوشتن نتیجه (بدون آن فقط گزارش می‌دهد)")
+    pp.set_defaults(fn=cmd_prune)
 
     for name, help_text in (
         ("enable", "فعال کردن اسکن یک پلتفرم (پس از کالیبراسیون) یا یک کانال تلگرام"),
