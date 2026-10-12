@@ -1,13 +1,31 @@
 {
-  "phase": "started",
+  "phase": "finished",
+  "job_status": "success",
   "run_url": "https://github.com/reARbitRA/konklancer/actions/runs/38294391400",
-  "started_at": "2026-10-12T18:57:32+00:00",
-  "request": {
-    "platforms": "parscoders,ponisha,karlancer",
-    "pages": 1,
-    "delay": 8,
-    "telegram": 1
+  "finished_at": "2026-10-12T19:00:24+00:00",
+  "projects_this_run": 179,
+  "by_category": {
+    "marketing": 9,
+    "graphic": 10,
+    "automation": 9,
+    "other": 59,
+    "writing": 9,
+    "video": 12,
+    "data": 12,
+    "uiux": 8,
+    "docs": 11,
+    "translation": 8,
+    "dev": 29,
+    "audio": 3
   },
-  "projects_in_feed": 0,
-  "note": "اسکن واقعی روی رانر گیت‌هاب؛ این فایل خودش نشان می‌دهد اجرا شروع شده است."
+  "by_source": {
+    "ponisha": 20,
+    "karlancer": 81,
+    "telegram:workarc": 18,
+    "telegram:freelancer_projects": 20,
+    "telegram:freelancer_sent": 20,
+    "telegram:iranfiverr": 20
+  },
+  "diagnostics": "=== parscoders.com ===\nrobots.txt -> 200\ncurl-failed\nصفحه اصلی -> 000 (0 bytes)\ncurl-failed\nrobots (۳۰۰ کاراکتر اول):\n\nسربرگ‌ها:\nHTTP/2 200 \nserver: nginx\ncontent-type: text/html; charset=UTF-8\nx-frame-options: SAMEORIGIN\nx-content-type-options: nosniff\nx-xss-protection: 1; mode=block\n\n=== ponisha.ir ===\nrobots.txt -> 404\nصفحه اصلی -> 200 (608409 bytes)\nrobots (۳۰۰ کاراکتر اول):\n<!DOCTYPE html><html lang=\"fa\" dir=\"rtl\"><head><meta charSet=\"utf-8\" data-next-head=\"\"/><meta name=\"viewport\" content=\"minimum-scale=1, initial-scale=1, width=device-width, shrink-to-fit=no, user-scalable=no, viewport-fit=cover\" data-next-head=\"\"/><title data-next-head=\"\">صفحه مورد نظر ی\nسربرگ‌ها:\nHTTP/2 200 \nx-nextjs-cache: HIT\nx-powered-by: Next.js\ncontent-type: text/html; charset=utf-8\nx-envoy-upstream-service-time: 352\nserver: istio-envoy\n\n=== www.karlancer.com ===\nrobots.txt -> 200\nصفحه اصلی -> 200 (503360 bytes)\nrobots (۳۰۰ کاراکتر اول):\nUser-agent: *\n\nDisallow: /panel/\nDisallow: /404\nDisallow: /500\nDisallow: /freelancer?q=*\nDisallow: /edu/search?q=*\nDisallow: /search?q=*\nDisallow: /services?q=*\nDisallow: /worksample?q=*\nDisallow: /api/file/workdiary/*\nDisallow: /external-payment/*\nDisallow: /external-charge/*\n\nAllow: /api/file*\n\n#S\nسربرگ‌ها:\nHTTP/2 200 \nserver: nginx\ncontent-type: text/html; charset=utf-8\nx-frame-options: DENY\nx-l: front\n\n=== t.me ===\nrobots.txt -> 404\nصفحه اصلی -> 302 (0 bytes)\nrobots (۳۰۰ کاراکتر اول):\n<html>\n<head><title>404 Not Found</title></head>\n<body>\n<center><h1>404 Not Found</h1></center>\n<hr><center>nginx/1.30.1</center>\n</body>\n</html>\n\nسربرگ‌ها:\nHTTP/2 302 \nserver: nginx/1.30.1\ncontent-type: text/html; charset=UTF-8\n\n[parscoders] صفحه 1 خوانده نشد — خطای HTTP: The read operation timed out\n[ponisha] کشف خودکار: div.MuiBox-root.breakpoint.css-1oru1ps (20 آیتم، امتیاز 81.5)\n[ponisha] صفحه 1: 20 پروژه\n[karlancer] کشف خودکار: div > div (24 آیتم، امتیاز 114.45)\n[karlancer] صفحه 1: 81 پروژه\nدسته‌ها: سایر: 41 · ویدیو و انیمیشن: 12 · گرافیک، لوگو و بروشور: 8 · رابط کاربری و طراحی سایت: 8 · تولید محتوا و نویسندگی: 6 · وب و اپلیکیشن: 6 · مارکتینگ، سئو و شبکه‌های اجتماعی: 5 · ترجمه و ویراستاری: 5 · داده، اکسل و تحلیل: 4 · اتوماسیون، ربات و اسکریپت: 3 · اسناد، پاورپوینت و پایان‌نامه: 2 · صدا و گویندگی: 1\nانتخابگرها برای ponisha, karlancer ذخیره شد (برای اسکن خودکار: enable --platform ...)\n101 مورد خوانده شد؛ 101 پس از فیلتر؛ 101 مورد جدید در scanner/out/projects.jsonl\n@workarc: 18 پیام\n@freelancer_projects: 20 پیام\n@freelancer_sent: 20 پیام\n@iranfiverr: 20 پیام\n78 مورد خوانده شد؛ 78 پس از فیلتر؛ 78 مورد جدید در scanner/out/projects.jsonl\n[parscoders] ذخیره نشد — خطای HTTP: The read operation timed out\n[ponisha] ذخیره شد: ponisha.html.gz (228504 کاراکتر → 27881 بایت فشرده)\n[karlancer] ذخیره شد: karlancer.html.gz (494460 کاراکتر → 34052 بایت فشرده)\n[telegram-workarc] ذخیره شد: telegram-workarc.html.gz (128902 کاراکتر → 19263 بایت فشرده)\n[telegram-freelancer_projects] ذخیره شد: telegram-freelancer_projects.html.gz (102539 کاراکتر → 10519 بایت فشرده)\n[telegram-freelancer_sent] ذخیره شد: telegram-freelancer_sent.html.gz (125749 کاراکتر → 17780 بایت فشرده)\n[telegram-iranfiverr] ذخیره شد: telegram-iranfiverr.html.gz (134654 کاراکتر → 25706 بایت فشرده)\n6 نمونه ذخیره شد. فهرست: scanner/tests/fixtures/live/manifest.json\n",
+  "note": "فید واقعی از اجرای اسکنر روی رانر گیت‌هاب؛ هیچ داده‌ی ساختگی در آن نیست."
 }

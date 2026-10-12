@@ -1,0 +1,62 @@
+{
+  "parscoders": {
+    "url": "https://parscoders.com/project/only-available/1",
+    "ok": false,
+    "error": "خطای HTTP: The read operation timed out",
+    "captured_at": "2026-10-12T18:59:50+00:00"
+  },
+  "ponisha": {
+    "url": "https://ponisha.ir/search/projects",
+    "ok": true,
+    "raw_chars": 477078,
+    "kept_chars": 228504,
+    "gz_bytes": 27881,
+    "sha256_kept": "2a45ee7260d19172",
+    "captured_at": "2026-10-12T18:59:55+00:00"
+  },
+  "karlancer": {
+    "url": "https://www.karlancer.com/search",
+    "ok": true,
+    "raw_chars": 700711,
+    "kept_chars": 494460,
+    "gz_bytes": 34052,
+    "sha256_kept": "efb20e08c8ae3087",
+    "captured_at": "2026-10-12T18:59:59+00:00"
+  },
+  "telegram-workarc": {
+    "url": "https://t.me/s/workarc",
+    "ok": true,
+    "raw_chars": 137220,
+    "kept_chars": 128902,
+    "gz_bytes": 19263,
+    "sha256_kept": "28acb47a22aff919",
+    "captured_at": "2026-10-12T19:00:00+00:00"
+  },
+  "telegram-freelancer_projects": {
+    "url": "https://t.me/s/freelancer_projects",
+    "ok": true,
+    "raw_chars": 110857,
+    "kept_chars": 102539,
+    "gz_bytes": 10519,
+    "sha256_kept": "4e2b99ec27b6cfc3",
+    "captured_at": "2026-10-12T19:00:08+00:00"
+  },
+  "telegram-freelancer_sent": {
+    "url": "https://t.me/s/freelancer_sent",
+    "ok": true,
+    "raw_chars": 134067,
+    "kept_chars": 125749,
+    "gz_bytes": 17780,
+    "sha256_kept": "2f457a7c48b0ece4",
+    "captured_at": "2026-10-12T19:00:16+00:00"
+  },
+  "telegram-iranfiverr": {
+    "url": "https://t.me/s/iranfiverr",
+    "ok": true,
+    "raw_chars": 142972,
+    "kept_chars": 134654,
+    "gz_bytes": 25706,
+    "sha256_kept": "3e031df8e40eae95",
+    "captured_at": "2026-10-12T19:00:24+00:00"
+  }
+}
