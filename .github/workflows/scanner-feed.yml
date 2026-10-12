@@ -3,13 +3,13 @@ name: scanner-feed
 # اسکن واقعی سایت‌های فریلنسری روی رانرهای گیت‌هاب.
 #
 # چرا اینجا؟ محیط توسعه/مرورگر به پارس‌کدرز، پونیشا، کارلنسر و t.me دسترسی TCP ندارد
-# (خطای HTTP 000 در سطح شبکه). رانر گیت‌هاب اینترنت آزاد دارد، پس همان اسکنر واقعی مخزن
+# (HTTP 000 در سطح شبکه). رانر گیت‌هاب اینترنت آزاد دارد، پس همان اسکنر واقعی مخزن
 # اینجا اجرا می‌شود: robots.txt رعایت می‌شود، ۸ ثانیه بین درخواست‌ها فاصله می‌گذارد و
 # ساختار صفحه در همان لحظه از خود DOM کشف می‌شود (هیچ انتخابگر هاردکدی).
 #
-# تریگر: تغییر فایل scanner/scan-request.json (چون workflow_dispatch فقط از برنچ پیش‌فرض
-# قابل فراخوانی است). خروجی هم به‌صورت commit روی همین برنچ نوشته می‌شود
-# (scanner/cloud-feed.jsonl و scanner/cloud-status.json) و هم artifact می‌شود.
+# تریگر: تغییر scanner/scan-request.json (چون workflow_dispatch فقط از برنچ پیش‌فرض کار می‌کند).
+# خروجی: scanner/cloud-feed.jsonl (فید تجمیعی) + scanner/cloud-status.json (وضعیت و عیب‌یابی)
+# روی همین برنچ کامیت می‌شود تا سرور محلی بتواند آن را بخواند، و ضمناً artifact هم می‌شود.
 
 on:
   push:
@@ -29,6 +29,8 @@ jobs:
   scan:
     runs-on: ubuntu-latest
     timeout-minutes: 25
+    env:
+      LANG: C.UTF-8
     steps:
       - uses: actions/checkout@v4
 
@@ -36,31 +38,49 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: خواندن پارامترهای درخواست اسکن
-        id: params
-        run: |
-          python - <<'PY' >> "$GITHUB_OUTPUT"
-          import json, pathlib, os, datetime
-          defaults = {"platforms": "parscoders,ponisha,karlancer", "pages": 1, "delay": 8, "telegram": 1}
-          path = pathlib.Path('scanner/scan-request.json')
-          data = dict(defaults)
-          if path.exists():
-              try:
-                  data.update({k: v for k, v in json.loads(path.read_text(encoding='utf-8')).items() if v not in (None, '')})
-              except Exception as exc:
-                  print(f"# scan-request.json ناخوانا: {exc}")
-          data.setdefault('requested_at', datetime.datetime.now(datetime.timezone.utc).isoformat(timespec='seconds'))
-          print("platforms=" + str(data['platforms']).replace(' ', ''))
-          print("pages=" + str(int(data['pages'])))
-          print("delay=" + str(float(data['delay'])))
-          print("telegram=" + str(int(data['telegram'])))
-          print("requested_at=" + str(data['requested_at']))
-          PY
-
       - name: نصب پیش‌نیازهای اسکنر
-        run: python -m pip install --quiet --upgrade pip httpx beautifulsoup4
+        run: python -m pip install --quiet --upgrade pip httpx beautifulsoup4 pytest
 
-      - name: تست‌های آفلاین اسکنر (قبل از هر تماس شبکه‌ای)
+      - name: خواندن پارامترها + هارت‌بیت (تأیید اینکه کامیت خودکار کار می‌کند)
+        env:
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          python - <<'PY'
+          import json, pathlib, datetime, os
+          defaults = {"platforms": "parscoders,ponisha,karlancer", "pages": 1, "delay": 8, "telegram": 1}
+          data = dict(defaults)
+          req = pathlib.Path('scanner/scan-request.json')
+          if req.exists():
+              try:
+                  data.update({k: v for k, v in json.loads(req.read_text(encoding='utf-8')).items()
+                               if k in defaults and v not in (None, '')})
+              except Exception as exc:  # noqa: BLE001
+                  print(f"scan-request.json ناخوانا: {exc}")
+          status = {
+              "phase": "started",
+              "run_url": os.environ.get("RUN_URL", ""),
+              "started_at": datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds"),
+              "request": data,
+              "projects_in_feed": 0,
+              "note": "اسکن واقعی روی رانر گیت‌هاب؛ این فایل خودش نشان می‌دهد اجرا شروع شده است.",
+          }
+          pathlib.Path('scanner/cloud-status.json').write_text(
+              json.dumps(status, ensure_ascii=False, indent=2) + "\n", encoding='utf-8')
+          with open(os.environ['GITHUB_OUTPUT'], 'a', encoding='utf-8') as fh:
+              fh.write("platforms=" + str(data['platforms']) + "\n")
+              fh.write("pages=" + str(int(data['pages'])) + "\n")
+              fh.write("delay=" + str(float(data['delay'])) + "\n")
+              fh.write("telegram=" + str(int(data['telegram'])) + "\n")
+          print("پارامترها:", data)
+          PY
+          git config user.name "konklancer-scan-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add scanner/cloud-status.json
+          git commit -q -m "data(scan): شروع اجرای اسکن [skip ci]" || true
+          git push || echo "PUSH_FAILED_START"
+        id: params
+
+      - name: تست‌های آفلاین اسکنر
         run: python -m pytest -q scanner/tests
 
       - name: عیب‌یابی ارتباط (robots.txt و کد پاسخ هر میزبان)
@@ -70,14 +90,19 @@ jobs:
           for host in parscoders.com ponisha.ir www.karlancer.com t.me; do
             {
               echo "=== $host ==="
-              echo -n "https://$host/robots.txt -> "
+              echo -n "robots.txt -> "
               curl -s -o /tmp/robots.txt -w '%{http_code}\n' --max-time 20 "https://$host/robots.txt" || echo "curl-failed"
-              echo -n "https://$host/ -> "
-              curl -s -o /dev/null -w '%{http_code}\n' --max-time 20 "https://$host/" || echo "curl-failed"
+              echo -n "صفحه اصلی -> "
+              curl -s -o /tmp/home.html -w '%{http_code} (%{size_download} bytes)\n' --max-time 25 "https://$host/" || echo "curl-failed"
+              echo "robots (۳۰۰ کاراکتر اول):"
               head -c 300 /tmp/robots.txt 2>/dev/null || true
               echo
-            } | tee -a scanner/out/diagnostics.txt
+              echo "سربرگ‌ها:"
+              curl -s -o /dev/null -D - --max-time 20 "https://$host/" 2>/dev/null | grep -iE '^(HTTP/|server:|content-type:|cf-|x-)' | head -8 || true
+              echo
+            } >> scanner/out/diagnostics.txt 2>&1
           done
+          cat scanner/out/diagnostics.txt
 
       - name: اسکن واقعی صفحات زنده (کشف خودکار ساختار)
         run: |
@@ -92,26 +117,29 @@ jobs:
       - name: اسکن کانال‌های عمومی تلگرام
         if: ${{ steps.params.outputs.telegram == '1' }}
         run: |
-          python - <<'PY' | tee -a scanner/out/diagnostics.txt
+          python - <<'PY'
           import json, pathlib
           p = pathlib.Path('scanner/telegram_sources.json')
           data = json.loads(p.read_text(encoding='utf-8'))
           for channel in data['channels']:
               channel['scan_enabled'] = True
           p.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding='utf-8')
-          print("کانال‌های تلگرام برای این اجرا فعال شدند:", [c['username'] for c in data['channels']])
+          print("کانال‌های تلگرام فعال‌شده برای این اجرا:", [c['username'] for c in data['channels']])
           PY
-          python -m scanner.konklancer_scan scan --telegram --delay "${{ steps.params.outputs.delay }}" \
+          python -m scanner.konklancer_scan scan --telegram \
+            --delay "${{ steps.params.outputs.delay }}" \
             --out scanner/out/projects.jsonl 2>&1 | tee -a scanner/out/diagnostics.txt
 
-      - name: ساخت گزارش وضعیت + انتشار فید روی همین برنچ
+      - name: انتشار فید و گزارش وضعیت روی برنچ
         if: always()
         env:
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          JOB_STATUS: ${{ job.status }}
         run: |
+          mkdir -p scanner/out
           touch scanner/out/projects.jsonl scanner/out/diagnostics.txt
           python - <<'PY'
-          import json, pathlib, collections, datetime, os
+          import collections, datetime, json, os, pathlib
 
           feed = pathlib.Path('scanner/out/projects.jsonl')
           rows = []
@@ -123,61 +151,44 @@ jobs:
                   except json.JSONDecodeError:
                       pass
 
-          hist = collections.Counter(r.get('category', 'other') for r in rows)
-          by_source = collections.Counter(r.get('source', '؟') for r in rows)
+          diagnostics = pathlib.Path('scanner/out/diagnostics.txt').read_text(encoding='utf-8')
           status = {
-              "scanned_at": datetime.datetime.now(datetime.timezone.utc).isoformat(timespec='seconds'),
-              "requested_at": os.environ.get('REQUESTED_AT', ''),
-              "platforms_requested": [p for p in os.environ.get('PLATFORMS', '').split(',') if p],
-              "projects_in_feed": len(rows),
-              "by_category": dict(hist),
-              "by_source": dict(by_source),
-              "run_url": os.environ.get('RUN_URL', ''),
-              "diagnostics": pathlib.Path('scanner/out/diagnostics.txt').read_text(encoding='utf-8')[-4000:],
-              "note": "فید واقعی از اجرای اسکنر روی رانرهای گیت‌هاب؛ هیچ داده‌ی ساختگی در آن نیست.",
+              "phase": "finished",
+              "job_status": os.environ.get("JOB_STATUS", ""),
+              "run_url": os.environ.get("RUN_URL", ""),
+              "finished_at": datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds"),
+              "projects_this_run": len(rows),
+              "by_category": dict(collections.Counter(r.get("category", "other") for r in rows)),
+              "by_source": dict(collections.Counter(r.get("source", "?") for r in rows)),
+              "diagnostics": diagnostics[-6000:],
+              "note": "فید واقعی از اجرای اسکنر روی رانر گیت‌هاب؛ هیچ داده‌ی ساختگی در آن نیست.",
           }
           pathlib.Path('scanner/cloud-status.json').write_text(
               json.dumps(status, ensure_ascii=False, indent=2) + "\n", encoding='utf-8')
 
-          # فید تجمیعی: کل رکوردهای دیده‌شده روی این برنچ (بدون تکرار، جدیدترین آخر)
           cloud = pathlib.Path('scanner/cloud-feed.jsonl')
           seen = {}
           if cloud.exists():
               for line in cloud.read_text(encoding='utf-8').splitlines():
-                  line = line.strip()
-                  if not line:
+                  if not line.strip():
                       continue
                   try:
                       row = json.loads(line)
                   except json.JSONDecodeError:
                       continue
-                  seen[row.get('id')] = row
+                  seen[row.get("id")] = row
           for row in rows:
-              seen[row.get('id')] = row
-          merged = list(seen.values())
-          merged.sort(key=lambda r: r.get('scraped_at') or r.get('posted_text') or '')
-          cloud.write_text(
-              "".join(json.dumps(r, ensure_ascii=False) + "\n" for r in merged), encoding='utf-8')
-          print(f"فید ابری: {len(rows)} رکورد تازه در این اجرا · {len(merged)} رکورد کل")
+              seen[row.get("id")] = row
+          merged = sorted(seen.values(), key=lambda r: r.get("scraped_at") or "")
+          cloud.write_text("".join(json.dumps(r, ensure_ascii=False) + "\n" for r in merged), encoding='utf-8')
+          print(f"این اجرا: {len(rows)} رکورد · فید ابری: {len(merged)} رکورد")
           PY
-
-          {
-            echo "### نتیجه‌ی اسکن زنده"
-            echo ""
-            echo "- پلتفرم‌ها: \`${{ steps.params.outputs.platforms }}\` (صفحه: ${{ steps.params.outputs.pages }}، فاصله: ${{ steps.params.outputs.delay }}s)"
-            echo "- پروژه‌های این اجرا: **$(grep -c . scanner/out/projects.jsonl || true)**"
-            echo "- کل فید ابری: **$(grep -c . scanner/cloud-feed.jsonl || true)**"
-            echo ""
-            echo "\`\`\`"
-            tail -n 30 scanner/out/diagnostics.txt || true
-            echo "\`\`\`"
-          } >> "$GITHUB_STEP_SUMMARY"
 
           git config user.name "konklancer-scan-bot"
           git config user.email "actions@users.noreply.github.com"
           git add scanner/cloud-feed.jsonl scanner/cloud-status.json
-          git commit -m "data(scan): فید و وضعیت اسکن زنده [skip ci]" || echo "چیزی برای کامیت نبود"
-          git push
+          git commit -q -m "data(scan): فید و وضعیت اسکن زنده [skip ci]" || echo "چیزی برای کامیت نبود"
+          git push || (git pull --rebase --autostash && git push) || echo "PUSH_FAILED_END"
 
       - name: بارگذاری artifact فید
         if: always()
