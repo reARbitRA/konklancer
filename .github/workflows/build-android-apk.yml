@@ -49,10 +49,6 @@ jobs:
         working-directory: mobile
         run: npm ci --no-audit --no-fund
 
-      - name: Generate Android project
-        working-directory: mobile
-        run: npx cap add android
-
       - name: Sync app configuration
         working-directory: mobile
         run: npx cap sync android
