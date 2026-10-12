@@ -27,6 +27,7 @@ import argparse
 import gzip
 import hashlib
 import json
+import os
 import re
 import sys
 import time
@@ -38,7 +39,7 @@ from typing import Iterable
 from urllib.parse import urljoin, urlparse
 
 import httpx
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup, Tag
 
 from . import autoparse
 from .taxonomy import CATEGORIES, CATEGORY_BY_KEY, category_label, detect_category
@@ -153,9 +154,11 @@ class RobotsCache:
 # واکشی امن
 # ---------------------------------------------------------------------------
 def make_client(transport: httpx.BaseTransport | None = None) -> httpx.Client:
+    # بعضی سایت‌ها از بیرون کند جواب می‌دهند؛ تایم‌اوت با env قابل افزایش است (پیش‌فرض ۲۰ ثانیه).
+    timeout = float(os.environ.get("KONKLANCER_HTTP_TIMEOUT", "20") or 20)
     return httpx.Client(
         headers={"User-Agent": USER_AGENT, "Accept-Language": "fa,en;q=0.8"},
-        timeout=20,
+        timeout=timeout,
         follow_redirects=True,
         transport=transport,
     )
@@ -235,8 +238,54 @@ def _select_items(soup: Tag, specs) -> list[Tag]:
     return []
 
 
+_LABEL_PREFIX = "label:"
+
+
+def _labelled_value(scope: Tag, label: str) -> str:
+    """مقدارِ کنارِ یک برچسب فارسی را پیدا می‌کند (الگوی رایج سایت‌های واقعی: «پیشنهادها  ۳»).
+
+    ساختارها متفاوت‌اند، پس چند حالت امتحان می‌شود: خواهر-برادر بعدی، متن باقی‌مانده‌ی والد،
+    و «آخرین مقدار داخل والد». اگر هیچ‌کدام جواب نداد، رشته‌ی خالی برمی‌گردد.
+    """
+    needle = label.strip()
+    if not needle:
+        return ""
+    label_el = None
+    for el in scope.find_all(True):
+        if el.find(True) is not None:
+            continue  # فقط برگ‌ها (متن مستقیم)
+        if el.get_text(" ", strip=True) == needle:
+            label_el = el
+            break
+    if label_el is None:
+        return ""
+    # حالت ۱: خواهر بعدی
+    for sibling in label_el.next_siblings:
+        text = _text(sibling) if isinstance(sibling, Tag) else str(sibling).strip()
+        if text:
+            return text
+    # حالت ۲: سایر فرزندان والد (بدون تکرار برچسب)
+    parent = label_el.find_parent(True)
+    if parent is not None:
+        values = [
+            _text(child)
+            for child in parent.find_all(True)
+            if child is not label_el and _text(child) and _text(child) != needle
+        ]
+        if values:
+            return values[-1]
+    return ""
+
+
 def _select_one(scope: Tag, specs) -> Tag | None:
     for spec in _selector_list(specs):
+        if isinstance(spec, str) and spec.startswith(_LABEL_PREFIX):
+            value = _labelled_value(scope, spec[len(_LABEL_PREFIX):])
+            if value:
+                # مقدار متنی است؛ برای سازگاری با امضای تابع، یک عنصر نگه‌دارنده می‌سازیم.
+                holder = BeautifulSoup(f"<span>{value}</span>", "html.parser").span
+                return holder
+            continue
         try:
             found = scope.select_one(spec)
         except Exception:
@@ -244,6 +293,38 @@ def _select_one(scope: Tag, specs) -> Tag | None:
         if found is not None:
             return found
     return None
+
+
+SUMMARY_MAX_CHARS = 1200
+
+#: مسیرهایی که هیچ‌وقت صفحه‌ی پروژه نیستند (منو/فوتر/حساب کاربری)
+NAV_PATHS = {
+    "", "/", "/login", "/signin", "/signup", "/register", "/post-job", "/new-project",
+    "/blog", "/about", "/contact", "/faq", "/terms", "/privacy", "/panel", "/dashboard",
+    "/jobs", "/services", "/freelancers", "/freelancer", "/users", "/profile", "/search",
+}
+#: عنوان‌هایی که آیتم منو هستند، نه پروژه
+NAV_TITLES = {
+    "خانه", "ورود", "ورود به کارلنسر", "ثبت نام", "ثبت‌نام", "ثبت پروژه", "ثبت پروژه رایگان",
+    "تماس با ما", "درباره ما", "قوانین", "پنل کاربری", "جستجو", "دسته‌بندی‌ها",
+}
+
+
+def _looks_like_nav_item(url: str, title: str) -> bool:
+    """آیتم منو/فوتر را از پروژه‌ی واقعی جدا می‌کند (خطای دیده‌شده در اسکن واقعی کارلنسر)."""
+    path = urlparse(url).path.rstrip("/").lower()
+    if path in NAV_PATHS:
+        return True
+    if re.search(r"/(login|signin|signup|register|post-job|new-project|blog|about|contact|faq|terms|privacy|panel)(/|$)", path):
+        return True
+    if re.search(r"/(api|assets?|static|img|images|uploads|files)/", path):
+        return True
+    cleaned = re.sub(r"\s+", " ", title).strip()
+    if cleaned in NAV_TITLES:
+        return True
+    # عنوان‌های خیلی کوتاه یا بی‌حرف (مثل «📢» یا «خانه») پروژه نیستند
+    letters = re.sub(r"[^\wآ-یءئ]", "", cleaned, flags=re.UNICODE)
+    return len(letters) < 5
 
 
 def parse_listing(html: str, base_url: str, source: str, selectors: dict) -> list[Project]:
@@ -267,7 +348,7 @@ def parse_listing(html: str, base_url: str, source: str, selectors: dict) -> lis
         if not title or not href:
             continue
         url = urljoin(base_url, href)
-        if url in seen_urls:
+        if url in seen_urls or _looks_like_nav_item(url, title):
             continue
         seen_urls.add(url)
         projects.append(
@@ -276,7 +357,11 @@ def parse_listing(html: str, base_url: str, source: str, selectors: dict) -> lis
                 source=source,
                 title=title,
                 url=url,
-                summary=_text(_select_one(item, selectors.get("summary"))) if selectors.get("summary") else "",
+                summary=(
+                    _text(_select_one(item, selectors.get("summary")))[:SUMMARY_MAX_CHARS]
+                    if selectors.get("summary")
+                    else ""
+                ),
                 budget_text=_text(_select_one(item, selectors.get("budget"))) if selectors.get("budget") else "",
                 bids_text=_text(_select_one(item, selectors.get("bids"))) if selectors.get("bids") else "",
                 posted_text=_text(_select_one(item, selectors.get("posted"))) if selectors.get("posted") else "",
@@ -296,8 +381,10 @@ def parse_telegram_preview(html: str, username: str) -> list[Project]:
         date_link = msg.select_one("a.tgme_widget_message_date")
         if text_el is None or date_link is None or not date_link.get("href"):
             continue
-        body = text_el.get_text("\n", strip=True)
-        if not body:
+        # متن واقعی تلگرام با <tg-emoji> و <b>/<i> درهم است؛ با «فاصله» به‌هم می‌چسبانیم تا
+        # خط اول به ایموجی تنها تبدیل نشود (باگی که در داده‌ی زنده دیده شد: عنوان «📢»).
+        body = re.sub(r"\s+", " ", text_el.get_text(" ", strip=True)).strip()
+        if len(body) < 20:
             continue
         time_el = msg.select_one("time")
         url = date_link["href"]
@@ -305,7 +392,7 @@ def parse_telegram_preview(html: str, username: str) -> list[Project]:
             Project(
                 id=_make_id(source, url),
                 source=source,
-                title=body.splitlines()[0][:200],
+                title=_telegram_title(body),
                 url=url,
                 summary=body[:1000],
                 posted_text=time_el.get("datetime", "") if time_el is not None else "",
@@ -313,6 +400,18 @@ def parse_telegram_preview(html: str, username: str) -> list[Project]:
             )
         )
     return projects
+
+
+def _telegram_title(body: str) -> str:
+    """عنوان خوانا از متن پیام: ایموجی‌ها حذف، و اگر «عنوان:» داشت همان برداشته می‌شود."""
+    cleaned = re.sub(r"[\U0001F000-\U0001FAFF\u2190-\u27BF\u2B00-\u2BFF\uFE0F\u200d]", " ", body)
+    cleaned = re.sub(r"\s+", " ", cleaned).strip(" :،-|")
+    match = re.search(r"(?:عنوان|موضوع)\s*[:：]\s*(.+?)(?:\s*(?:شرح|توضیح|بودجه|دسته)|$)", cleaned)
+    if match:
+        candidate = match.group(1).strip(" :،-|")
+        if len(candidate) >= 8:
+            return candidate[:200]
+    return cleaned[:200]
 
 
 # ---------------------------------------------------------------------------

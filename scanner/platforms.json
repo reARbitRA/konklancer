@@ -19,7 +19,12 @@
       "python -m scanner.konklancer_scan probe --platform parscoders --save",
       "python -m scanner.konklancer_scan autoscan --platform parscoders,ponisha,karlancer --save",
       "python -m scanner.konklancer_scan autodetect --platform ponisha --html SAVED.html --save"
-    ]
+    ],
+    "verified_selectors": {
+      "karlancer": "https://www.karlancer.com/projects (۲۴ کارت واقعی)",
+      "ponisha": "https://ponisha.ir/projects (۲۰ پروژه‌ی یکتا)",
+      "parscoders": "هنوز تأیید نشده — صفحه در اجرای رانر تایم‌اوت داد؛ با KONKLANCER_HTTP_TIMEOUT=45 دوباره تلاش می‌شود"
+    }
   },
   "platforms": [
     {
@@ -32,7 +37,7 @@
       "status": "active",
       "commission_freelancer": "۱۰٪ (برنزی)، ۸٪ (نقره‌ای)، ۷٪ (طلایی) — تعرفه رسمی",
       "public_stats": "ارزش پروژه‌های ثبت‌شده در ۱۴۰۲: حدود ۵۱۰ میلیارد تومان؛ ۸۴۵ هزار پیشنهاد؛ ۸۹٪ پروژه‌ها حداقل یک پیشنهاد",
-      "listing_url": "https://ponisha.ir/search/projects",
+      "listing_url": "https://ponisha.ir/projects",
       "robots": "ponisha.ir/robots.txt پاسخ ۴۰۴ داد؛ قبل از فعال‌سازی دوباره بررسی شود",
       "scan_enabled": false,
       "sources": [
@@ -214,7 +219,24 @@
         }
       ],
       "notes": {
-        "calibration": "انتخابگرها تأییدنشده‌اند. `probe` نامزدها را روی صفحه‌ی زنده امتحان می‌کند و `autodetect/autoscan` ساختار واقعی را از خود HTML یاد می‌گیرد؛ `scan --auto` هم در زمان اجرا خودکار کشف می‌کند. robots.txt پیش از فعال‌سازی دستی بازبینی شود."
+        "calibration": "تأییدشده روی صفحه‌ی واقعی (2026-10-12، نمونه‌ی ذخیره‌شده در scanner/tests/fixtures/live/ که رانر گیت‌هاب گرفته است). اسکن با همین انتخابگرها کار می‌کند؛ اگر سایت ساختارش را عوض کرد، `probe`/`autoscan --save` انتخابگر تازه را پیدا و به‌روز می‌کند."
+      },
+      "scan_selectors": {
+        "item": "article",
+        "title": "span.MuiTypography-h4",
+        "link": "a[href^='/project/']",
+        "bids": "label:پیشنهادها",
+        "summary": "span.MuiTypography-subtitle1"
+      },
+      "scan_selectors_verified": {
+        "verified": true,
+        "verified_at": "2026-10-12",
+        "method": "تأییدشده روی صفحه‌ی واقعی (2026-10-12، نمونه‌ی ذخیره‌شده در scanner/tests/fixtures/live/ که رانر گیت‌هاب گرفته است)",
+        "observed": {
+          "cards": 40,
+          "unique_projects": 20,
+          "with_bids": 20
+        }
       }
     },
     {
@@ -228,7 +250,7 @@
       "status": "active",
       "commission_freelancer": "حداکثر ۱۰٪ بسته به طرح عضویت — پاسخ پشتیبانی رسمی",
       "public_stats": "آمار رسمی جدیدی منتشر نشده؛ صفحه اصلی ادعای ۲٪ پاداش برای کارفرما دارد",
-      "listing_url": "https://www.karlancer.com/search",
+      "listing_url": "https://www.karlancer.com/projects",
       "robots": "/search?q=* و /api* ممنوع‌اند؛ /search بدون پارامتر در robots ممنوع نشده",
       "scan_enabled": false,
       "sources": [
@@ -410,7 +432,24 @@
         }
       ],
       "notes": {
-        "calibration": "انتخابگرها تأییدنشده‌اند. `probe` نامزدها را روی صفحه‌ی زنده امتحان می‌کند و `autodetect/autoscan` ساختار واقعی را از خود HTML یاد می‌گیرد؛ `scan --auto` هم در زمان اجرا خودکار کشف می‌کند. robots.txt پیش از فعال‌سازی دستی بازبینی شود."
+        "calibration": "تأییدشده روی صفحه‌ی واقعی (2026-10-12، نمونه‌ی ذخیره‌شده در scanner/tests/fixtures/live/ که رانر گیت‌هاب گرفته است). اسکن با همین انتخابگرها کار می‌کند؛ اگر سایت ساختارش را عوض کرد، `probe`/`autoscan --save` انتخابگر تازه را پیدا و به‌روز می‌کند."
+      },
+      "scan_selectors": {
+        "item": "app-sidebar-project-card",
+        "title": "h4.fs-18.font-weight-bold",
+        "link": "a[href*='/projects/']",
+        "budget": "div.fs-16.b-900",
+        "posted": "span.fs-13"
+      },
+      "scan_selectors_verified": {
+        "verified": true,
+        "verified_at": "2026-10-12",
+        "method": "تأییدشده روی صفحه‌ی واقعی (2026-10-12، نمونه‌ی ذخیره‌شده در scanner/tests/fixtures/live/ که رانر گیت‌هاب گرفته است)",
+        "observed": {
+          "cards": 24,
+          "with_budget": 24,
+          "with_posted": 24
+        }
       }
     },
     {

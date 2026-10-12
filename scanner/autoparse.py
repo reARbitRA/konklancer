@@ -234,7 +234,20 @@ def detect_candidates(html: str, min_count: int = 5, max_candidates: int = 6) ->
         # گروه هم‌فرند (لیست واقعی زیر یک والد مشترک) کمی ترجیح داده می‌شود.
         structure_bonus = 1.05 if kind == "sibling" else 1.0
         # انتخابگر کلاس‌دار دقیق‌تر از تگ خالی است (مثلاً `div.project-card` در برابر `main > div`)
-        specificity_bonus = 3.0 if "." in signature.split(">")[-1] else 0.0
+        last_segment = signature.split(">")[-1]
+        specificity_bonus = 3.0 if "." in last_segment or "[" in last_segment else 0.0
+
+        # «دقت انتخابگر» — باگ واقعی روی کارلنسر: انتخابگر `div > div` داخل یک گروه ۲۴ تایی
+        # درست به نظر می‌رسد، ولی وقتی روی کل صفحه اعمال شود صدها عنصر (منو، فوتر) را هم می‌گیرد.
+        # پس نسبت تطبیق‌های همین انتخابگر در کل صفحه به اندازه‌ی گروه را جریمه می‌کنیم.
+        css = _css(signature)
+        try:
+            global_matches = len(soup.select(css))
+        except Exception:
+            global_matches = len(nodes)
+        precision = (len(nodes) / global_matches) if global_matches else 1.0
+        precision_penalty = 0.45 + 0.55 * min(1.0, precision)
+
         score = (
             min(usable, 40) * 1.0
             + distinct_urls * 25
@@ -242,7 +255,7 @@ def detect_candidates(html: str, min_count: int = 5, max_candidates: int = 6) ->
             + bids_ratio * 15
             + posted_ratio * 10
             + min(avg_len, 400) / 40
-        ) * structure_bonus + specificity_bonus
+        ) * structure_bonus * precision_penalty + specificity_bonus
 
         keep_nodes = nodes[:]
         selectors = {
@@ -261,6 +274,8 @@ def detect_candidates(html: str, min_count: int = 5, max_candidates: int = 6) ->
             selectors["posted"] = posted_sel
 
         reasons = [f"{usable} آیتم تکرارشده با لینک یکتا"]
+        if precision < 0.6:
+            reasons.append(f"انتخابگر بیش از حد کلی است (تطبیق سراسری: {global_matches})")
         if kind == "sibling":
             reasons.append("لیست هم‌فرند زیر یک والد مشترک")
         if budget_ratio > 0:
