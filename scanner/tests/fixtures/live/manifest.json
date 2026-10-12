@@ -3,19 +3,19 @@
     "url": "https://parscoders.com/project/only-available/1",
     "ok": false,
     "error": "خطای HTTP: The read operation timed out",
-    "captured_at": "2026-10-12T19:22:24+00:00"
+    "captured_at": "2026-10-12T19:31:16+00:00"
   },
   "ponisha": {
     "url": "https://ponisha.ir/projects",
     "ok": false,
     "error": "خطای HTTP: Client error '404 Not Found' for url 'https://ponisha.ir/projects'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/404",
-    "captured_at": "2026-10-12T19:22:26+00:00"
+    "captured_at": "2026-10-12T19:31:18+00:00"
   },
   "karlancer": {
     "url": "https://www.karlancer.com/projects",
     "ok": false,
     "error": "خطای HTTP: Client error '404 Not Found' for url 'https://www.karlancer.com/projects'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/404",
-    "captured_at": "2026-10-12T19:22:27+00:00"
+    "captured_at": "2026-10-12T19:31:20+00:00"
   },
   "telegram-workarc": {
     "url": "https://t.me/s/workarc",
@@ -23,26 +23,26 @@
     "raw_chars": 137220,
     "kept_chars": 128902,
     "gz_bytes": 19263,
-    "sha256_kept": "1413087783ec4e22",
-    "captured_at": "2026-10-12T19:23:13+00:00"
+    "sha256_kept": "a901c42a7ea056d5",
+    "captured_at": "2026-10-12T19:31:23+00:00"
   },
   "telegram-freelancer_projects": {
     "url": "https://t.me/s/freelancer_projects",
     "ok": true,
     "raw_chars": 110857,
     "kept_chars": 102539,
-    "gz_bytes": 10528,
-    "sha256_kept": "716ded0774774b09",
-    "captured_at": "2026-10-12T19:23:22+00:00"
+    "gz_bytes": 10522,
+    "sha256_kept": "2e56f81899ddf28d",
+    "captured_at": "2026-10-12T19:31:31+00:00"
   },
   "telegram-freelancer_sent": {
     "url": "https://t.me/s/freelancer_sent",
     "ok": true,
-    "raw_chars": 134067,
-    "kept_chars": 125749,
-    "gz_bytes": 17786,
-    "sha256_kept": "0f1624e526e53f9d",
-    "captured_at": "2026-10-12T19:23:30+00:00"
+    "raw_chars": 134066,
+    "kept_chars": 125748,
+    "gz_bytes": 17790,
+    "sha256_kept": "74a1cae0ccff4afa",
+    "captured_at": "2026-10-12T19:31:39+00:00"
   },
   "telegram-iranfiverr": {
     "url": "https://t.me/s/iranfiverr",
@@ -50,13 +50,16 @@
     "raw_chars": 142972,
     "kept_chars": 134654,
     "gz_bytes": 25713,
-    "sha256_kept": "e3fb2147c223857e",
-    "captured_at": "2026-10-12T19:23:38+00:00"
+    "sha256_kept": "2526d682f9087c0e",
+    "captured_at": "2026-10-12T19:31:47+00:00"
   },
   "project-only-available": {
     "url": "https://parscoders.com/project/only-available",
-    "ok": false,
-    "error": "خطای HTTP: The read operation timed out",
-    "captured_at": "2026-10-12T19:23:13+00:00"
+    "ok": true,
+    "raw_chars": 671180,
+    "kept_chars": 619015,
+    "gz_bytes": 57271,
+    "sha256_kept": "f9df659f95bfa05e",
+    "captured_at": "2026-10-12T19:31:22+00:00"
   }
 }
