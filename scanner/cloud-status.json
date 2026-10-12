@@ -1,30 +1,13 @@
 {
-  "phase": "finished",
-  "job_status": "success",
-  "run_url": "https://github.com/reARbitRA/konklancer/actions/runs/38293888420",
-  "finished_at": "2026-10-12T18:54:58+00:00",
-  "projects_this_run": 159,
-  "by_category": {
-    "other": 53,
-    "uiux": 8,
-    "writing": 8,
-    "docs": 12,
-    "translation": 8,
-    "data": 11,
-    "video": 9,
-    "dev": 29,
-    "graphic": 7,
-    "marketing": 5,
-    "audio": 3,
-    "automation": 6
+  "phase": "started",
+  "run_url": "https://github.com/reARbitRA/konklancer/actions/runs/38294391400",
+  "started_at": "2026-10-12T18:57:32+00:00",
+  "request": {
+    "platforms": "parscoders,ponisha,karlancer",
+    "pages": 1,
+    "delay": 8,
+    "telegram": 1
   },
-  "by_source": {
-    "karlancer": 81,
-    "telegram:workarc": 18,
-    "telegram:freelancer_projects": 20,
-    "telegram:freelancer_sent": 20,
-    "telegram:iranfiverr": 20
-  },
-  "diagnostics": "=== parscoders.com ===\nrobots.txt -> 200\ncurl-failed\nصفحه اصلی -> 200 (445152 bytes)\nrobots (۳۰۰ کاراکتر اول):\n\nسربرگ‌ها:\n\n=== ponisha.ir ===\nrobots.txt -> 404\nصفحه اصلی -> 200 (608377 bytes)\nrobots (۳۰۰ کاراکتر اول):\n<!DOCTYPE html><html lang=\"fa\" dir=\"rtl\"><head><meta charSet=\"utf-8\" data-next-head=\"\"/><meta name=\"viewport\" content=\"minimum-scale=1, initial-scale=1, width=device-width, shrink-to-fit=no, user-scalable=no, viewport-fit=cover\" data-next-head=\"\"/><title data-next-head=\"\">صفحه مورد نظر ی\nسربرگ‌ها:\nHTTP/2 200 \nx-nextjs-cache: HIT\nx-powered-by: Next.js\ncontent-type: text/html; charset=utf-8\nx-envoy-upstream-service-time: 39\nserver: istio-envoy\n\n=== www.karlancer.com ===\nrobots.txt -> 200\nصفحه اصلی -> 200 (503360 bytes)\nrobots (۳۰۰ کاراکتر اول):\nUser-agent: *\n\nDisallow: /panel/\nDisallow: /404\nDisallow: /500\nDisallow: /freelancer?q=*\nDisallow: /edu/search?q=*\nDisallow: /search?q=*\nDisallow: /services?q=*\nDisallow: /worksample?q=*\nDisallow: /api/file/workdiary/*\nDisallow: /external-payment/*\nDisallow: /external-charge/*\n\nAllow: /api/file*\n\n#S\nسربرگ‌ها:\nHTTP/2 200 \nserver: nginx\ncontent-type: text/html; charset=utf-8\nx-frame-options: DENY\nx-l: front\n\n=== t.me ===\nrobots.txt -> 404\nصفحه اصلی -> 302 (0 bytes)\nrobots (۳۰۰ کاراکتر اول):\n<html>\n<head><title>404 Not Found</title></head>\n<body>\n<center><h1>404 Not Found</h1></center>\n<hr><center>nginx/1.30.1</center>\n</body>\n</html>\n\nسربرگ‌ها:\nHTTP/2 302 \nserver: nginx/1.30.1\ncontent-type: text/html; charset=UTF-8\n\n[parscoders] صفحه 1 خوانده نشد — خطای HTTP: The read operation timed out\n[ponisha] صفحه 1 خوانده نشد — خطای HTTP: Server error '503 Service Unavailable' for url 'https://ponisha.ir/search/projects'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/503\n[karlancer] کشف خودکار: div > div (24 آیتم، امتیاز 114.45)\n[karlancer] صفحه 1: 81 پروژه\nدسته‌ها: سایر: 35 · ویدیو و انیمیشن: 9 · رابط کاربری و طراحی سایت: 8 · وب و اپلیکیشن: 6 · تولید محتوا و نویسندگی: 5 · ترجمه و ویراستاری: 5 · گرافیک، لوگو و بروشور: 5 · اسناد، پاورپوینت و پایان‌نامه: 3 · داده، اکسل و تحلیل: 3 · مارکتینگ، سئو و شبکه‌های اجتماعی: 1 · صدا و گویندگی: 1\nانتخابگرها برای karlancer ذخیره شد (برای اسکن خودکار: enable --platform ...)\n81 مورد خوانده شد؛ 81 پس از فیلتر؛ 81 مورد جدید در scanner/out/projects.jsonl\n@workarc: 18 پیام\n@freelancer_projects: 20 پیام\n@freelancer_sent: 20 پیام\n@iranfiverr: 20 پیام\n78 مورد خوانده شد؛ 78 پس از فیلتر؛ 78 مورد جدید در scanner/out/projects.jsonl\n",
-  "note": "فید واقعی از اجرای اسکنر روی رانر گیت‌هاب؛ هیچ داده‌ی ساختگی در آن نیست."
+  "projects_in_feed": 0,
+  "note": "اسکن واقعی روی رانر گیت‌هاب؛ این فایل خودش نشان می‌دهد اجرا شروع شده است."
 }
