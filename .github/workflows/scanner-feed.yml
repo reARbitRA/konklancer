@@ -130,6 +130,16 @@ jobs:
             --delay "${{ steps.params.outputs.delay }}" \
             --out scanner/out/projects.jsonl 2>&1 | tee -a scanner/out/diagnostics.txt
 
+      - name: ذخیره‌ی نمونه‌ی HTML واقعی برای کالیبراسیون آفلاین
+        continue-on-error: true
+        run: |
+          python -m scanner.konklancer_scan capture \
+            --target parscoders,ponisha,karlancer \
+            --telegram \
+            --delay "${{ steps.params.outputs.delay }}" \
+            --out-dir scanner/tests/fixtures/live 2>&1 | tee -a scanner/out/diagnostics.txt
+          ls -la scanner/tests/fixtures/live || true
+
       - name: انتشار فید و گزارش وضعیت روی برنچ
         if: always()
         env:
@@ -180,6 +190,8 @@ jobs:
           for row in rows:
               seen[row.get("id")] = row
           merged = sorted(seen.values(), key=lambda r: r.get("scraped_at") or "")
+          # سقف نگه‌داری: آخرین ۱۵۰۰ رکورد تا فایل از سقف خواندن contents API (۱ مگابایت) رد نشود
+          merged = merged[-1500:]
           cloud.write_text("".join(json.dumps(r, ensure_ascii=False) + "\n" for r in merged), encoding='utf-8')
           print(f"این اجرا: {len(rows)} رکورد · فید ابری: {len(merged)} رکورد")
           PY
@@ -187,6 +199,7 @@ jobs:
           git config user.name "konklancer-scan-bot"
           git config user.email "actions@users.noreply.github.com"
           git add scanner/cloud-feed.jsonl scanner/cloud-status.json
+          git add -f scanner/tests/fixtures/live 2>/dev/null || true
           git commit -q -m "data(scan): فید و وضعیت اسکن زنده [skip ci]" || echo "چیزی برای کامیت نبود"
           git push || (git pull --rebase --autostash && git push) || echo "PUSH_FAILED_END"
 

@@ -24,8 +24,10 @@ konklancer scanner — جمع‌آوری فقط‌خواندنی پروژه‌ه
 from __future__ import annotations
 
 import argparse
+import gzip
 import hashlib
 import json
+import re
 import sys
 import time
 import urllib.robotparser
@@ -476,6 +478,85 @@ def cmd_snapshot(args) -> int:
     out = SNAPSHOT_DIR / f"{plat['id']}.html"
     out.write_text(html, encoding="utf-8")
     print(f"ذخیره شد: {out} ({len(html)} کاراکتر). انتخابگرها را از روی آن تنظیم کنید.")
+    return 0
+
+
+def _strip_inline_assets(html: str) -> str:
+    """بدنه‌ی <script>/<style> را حذف می‌کند (فقط برای ذخیره‌ی فیکسچر؛ ساختار DOM دست‌نخورده می‌ماند)."""
+    html = re.sub(r"(?is)<script\b[^>]*>.*?</script>", "<script></script>", html)
+    html = re.sub(r"(?is)<style\b[^>]*>.*?</style>", "<style></style>", html)
+    return html
+
+
+def _slug(text: str) -> str:
+    slug = re.sub(r"[^a-zA-Z0-9_.-]+", "-", text).strip("-").lower()
+    return slug[:60] or "page"
+
+
+def cmd_capture(args) -> int:
+    """نمونه‌ی HTML واقعی صفحه‌ها را برای کالیبراسیون/تست آفلاین ذخیره می‌کند.
+
+    قواعد ایمنی همان اسکن است: robots.txt هر میزبان بررسی می‌شود، بین درخواست‌ها فاصله می‌افتد
+    و ریدایرکت خارج از دامنه متوقف می‌شود. اسکریپت‌ها حذف می‌شوند تا فایل سبک و قابل‌کامیت بماند.
+    """
+    reg = load_registry()
+    out_dir = Path(args.out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    targets: list[tuple[str, str]] = []
+    for item in [x.strip() for x in (args.target or "").split(",") if x.strip()]:
+        if item.startswith("http://") or item.startswith("https://"):
+            targets.append((_slug(urlparse(item).path or urlparse(item).netloc), item))
+        else:
+            plat = get_platform(reg, item)
+            url = _platform_urls(plat)
+            targets.append((plat["id"], page_url(url[0], 1) if url else ""))
+    if args.telegram:
+        tg = json.loads(TELEGRAM_PATH.read_text(encoding="utf-8"))
+        for channel in tg["channels"]:
+            targets.append((f"telegram-{channel['username']}", f"https://t.me/s/{channel['username']}"))
+
+    if not targets:
+        raise SystemExit("چیزی برای ذخیره انتخاب نشده. مثلاً: capture --target parscoders,ponisha --telegram")
+
+    manifest_path = out_dir / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8")) if manifest_path.exists() else {}
+    ok = 0
+
+    with make_client() as client:
+        robots = RobotsCache(client)
+        limiter = RateLimiter(args.delay)
+        for name, url in targets:
+            if not url:
+                print(f"[{name}] نشانی ندارد؛ رد شد.", file=sys.stderr)
+                continue
+            host = urlparse(url).netloc
+            html, error = _fetch_once(client, robots, limiter, url, host)
+            if html is None:
+                print(f"[{name}] ذخیره نشد — {error}", file=sys.stderr)
+                manifest[name] = {"url": url, "ok": False, "error": error, "captured_at": _now()}
+                continue
+            cleaned = _strip_inline_assets(html)
+            if args.max_bytes:
+                cleaned = cleaned[: args.max_bytes]
+            payload = cleaned.encode("utf-8")
+            out = out_dir / f"{name}.html.gz"
+            with gzip.open(out, "wb") as fh:
+                fh.write(payload)
+            manifest[name] = {
+                "url": url,
+                "ok": True,
+                "raw_chars": len(html),
+                "kept_chars": len(cleaned),
+                "gz_bytes": out.stat().st_size,
+                "sha256_kept": hashlib.sha256(payload).hexdigest()[:16],
+                "captured_at": _now(),
+            }
+            ok += 1
+            print(f"[{name}] ذخیره شد: {out.name} ({len(cleaned)} کاراکتر → {out.stat().st_size} بایت فشرده)")
+
+    manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    print(f"{ok} نمونه ذخیره شد. فهرست: {manifest_path}")
     return 0
 
 
@@ -937,6 +1018,17 @@ def build_parser() -> argparse.ArgumentParser:
     pr.add_argument("--delay", type=float, default=8.0)
     pr.add_argument("--save", action="store_true", help="ذخیره‌ی بهترین نتیجه در platforms.json")
     pr.set_defaults(fn=cmd_probe)
+
+    cp = sub.add_parser(
+        "capture",
+        help="ذخیره‌ی HTML واقعی صفحه‌ها (اسکریپت‌حذف‌شده و فشرده) برای کالیبراسیون و تست آفلاین",
+    )
+    cp.add_argument("--target", default="", help="شناسه‌ی پلتفرم یا نشانی کامل، با کاما")
+    cp.add_argument("--telegram", action="store_true", help="کانال‌های telegram_sources.json هم ذخیره شوند")
+    cp.add_argument("--out-dir", default="scanner/tests/fixtures/live")
+    cp.add_argument("--max-bytes", type=int, default=2_000_000, help="حداکثر حجم متنی هر نمونه")
+    cp.add_argument("--delay", type=float, default=8.0)
+    cp.set_defaults(fn=cmd_capture)
 
     ad = sub.add_parser("autodetect", help="کشف خودکار ساختار صفحه (از فایل HTML یا صفحه‌ی زنده)")
     ad.add_argument("--platform", default="", help="شناسه پلتفرم در platforms.json (برای ذخیره لازم است)")
