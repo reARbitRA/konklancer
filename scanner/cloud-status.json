@@ -1,0 +1,13 @@
+{
+  "phase": "started",
+  "run_url": "https://github.com/reARbitRA/konklancer/actions/runs/38293888420",
+  "started_at": "2026-10-12T18:53:04+00:00",
+  "request": {
+    "platforms": "parscoders,ponisha,karlancer",
+    "pages": 1,
+    "delay": 8,
+    "telegram": 1
+  },
+  "projects_in_feed": 0,
+  "note": "اسکن واقعی روی رانر گیت‌هاب؛ این فایل خودش نشان می‌دهد اجرا شروع شده است."
+}
