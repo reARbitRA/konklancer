@@ -107,13 +107,26 @@ jobs:
 
       - name: اسکن واقعی صفحات زنده (کشف خودکار ساختار)
         run: |
-          python -m scanner.konklancer_scan autoscan \
-            --platform "${{ steps.params.outputs.platforms }}" \
-            --pages "${{ steps.params.outputs.pages }}" \
-            --delay "${{ steps.params.outputs.delay }}" \
-            --min-count 3 \
-            --save \
-            --out scanner/out/projects.jsonl 2>&1 | tee -a scanner/out/diagnostics.txt
+          mkdir -p scanner/out
+          touch scanner/out/projects.jsonl
+          scan_platforms() {
+            python -m scanner.konklancer_scan autoscan \
+              --platform "${{ steps.params.outputs.platforms }}" \
+              --pages "${{ steps.params.outputs.pages }}" \
+              --delay "${{ steps.params.outputs.delay }}" \
+              --min-count 3 \
+              --save \
+              --out scanner/out/projects.jsonl 2>&1 | tee -a scanner/out/diagnostics.txt
+          }
+          scan_platforms
+          # سایت‌های ایرانی از IP ابری گاهی ۴۰۴/۵۰۳/تایم‌اوت می‌دهند؛ یک‌بار دیگر با فاصله امتحان می‌کنیم.
+          if [ "$(grep -c . scanner/out/projects.jsonl || true)" -eq 0 ]; then
+            echo "=== تلاش دوم پس از ۴۵ ثانیه (خروجی اول خالی بود) ===" | tee -a scanner/out/diagnostics.txt
+            sleep 45
+            scan_platforms
+          fi
+          echo "=== جمع‌بندی صفحه‌ها ===" | tee -a scanner/out/diagnostics.txt
+          grep -c . scanner/out/projects.jsonl | tee -a scanner/out/diagnostics.txt || true
 
       - name: اسکن کانال‌های عمومی تلگرام (کانال‌های تأییدشده‌ی مخزن)
         if: ${{ steps.params.outputs.telegram == '1' }}
@@ -176,6 +189,26 @@ jobs:
           pathlib.Path('scanner/cloud-status.json').write_text(
               json.dumps(status, ensure_ascii=False, indent=2) + "\n", encoding='utf-8')
 
+          # قواعد پاکسازی: ردیف منو/فوتر و کانال‌های غیرفعال نباید در فید بمانند
+          import sys
+          sys.path.insert(0, '.')
+          from scanner.konklancer_scan import _looks_like_nav_item
+
+          enabled_channels = set()
+          tg = pathlib.Path('scanner/telegram_sources.json')
+          if tg.exists():
+              for channel in json.loads(tg.read_text(encoding='utf-8')).get('channels', []):
+                  if channel.get('scan_enabled'):
+                      enabled_channels.add(f"telegram:{channel['username']}")
+
+          def keep(row):
+              source = row.get('source', '')
+              if _looks_like_nav_item(row.get('url', ''), row.get('title', '')):
+                  return False
+              if source.startswith('telegram:') and enabled_channels and source not in enabled_channels:
+                  return False
+              return True
+
           cloud = pathlib.Path('scanner/cloud-feed.jsonl')
           seen = {}
           if cloud.exists():
@@ -189,7 +222,8 @@ jobs:
                   seen[row.get("id")] = row
           for row in rows:
               seen[row.get("id")] = row
-          merged = sorted(seen.values(), key=lambda r: r.get("scraped_at") or "")
+          merged = [row for row in seen.values() if keep(row)]
+          merged = sorted(merged, key=lambda r: r.get("scraped_at") or "")
           # سقف نگه‌داری: آخرین ۱۵۰۰ رکورد تا فایل از سقف خواندن contents API (۱ مگابایت) رد نشود
           merged = merged[-1500:]
           cloud.write_text("".join(json.dumps(r, ensure_ascii=False) + "\n" for r in merged), encoding='utf-8')
