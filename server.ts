@@ -6,6 +6,25 @@ import dotenv from 'dotenv';
 import { Server as SocketIOServer } from 'socket.io';
 import { callLLM, LLMError, parseJsonLoose, readLLMConfig } from './server/llm';
 import { checkContent } from './server/contentFilter';
+import { ALL_CATEGORIES, categoryLabel, categoryPromptList } from './shared/taxonomy';
+import {
+  buildFeed,
+  categorize,
+  fetchCloudFeedText,
+  fetchCloudStatus,
+  readCloudFeedConfig,
+  requestCloudScan,
+  syncCloudFeed,
+  waitForCloudScan,
+  describeCategories,
+  readProjects,
+  readScanConfig,
+  readScanTargets,
+  runScanner,
+  scannerBusy,
+  type FeedJob,
+  cloudTransport,
+} from './server/scannerBridge';
 
 dotenv.config();
 
@@ -43,7 +62,7 @@ const DEFAULT_JOBS = [
     deadline: '۲ روز',
     postedTime: '۲۷ دقیقه پیش',
     category: 'ربات تلگرام / پایتون',
-    categoryKey: 'telegram',
+    categoryKey: 'automation',
     tags: ['Telegram Bot', 'python-telegram-bot', 'Asyncio', 'Regex'],
     description: 'رباتی نیاز دارم که به عنوان ادمین در ۲ کانال مبدا عضو باشد و به محض ارسال پست، متن آن را بررسی کند، لینک‌های آیدی و تبلیغات متنی را فیلتر کند و در کانال مقصد قرار دهد. سورس مرتب و کامنت‌گذاری شده همراه با داک اجرای لوکال نیاز دارم.',
     proposalsCount: 9,
@@ -83,7 +102,7 @@ const DEFAULT_JOBS = [
     deadline: '۱ روز',
     postedTime: '۱ ساعت پیش',
     category: 'توسعه API / بک‌اند',
-    categoryKey: 'api',
+    categoryKey: 'dev',
     tags: ['FastAPI', 'Zarinpal', 'Kavenegar SMS', 'Webhook'],
     description: 'یک مینی‌سرویس پایتون با فست‌ای‌پی‌آی داریم که می‌خواهیم بعد از کال‌بک موفقیت‌آمیز زرین‌پال، پترن پیامکی کاوه‌نگار را برای خریدار شلیک کند و کد سفارش را در دیتابیس لاگ بیندازد.',
     proposalsCount: 7,
@@ -103,7 +122,7 @@ const DEFAULT_JOBS = [
     deadline: '۲ روز',
     postedTime: '۱ ساعت پیش',
     category: 'وب اسکرپینگ / پایتون',
-    categoryKey: 'scraping',
+    categoryKey: 'automation',
     tags: ['Python', 'Requests', 'Telegram Notifications', 'Scheduler'],
     description: 'می‌خواهیم یک اسکریپت سبک روی سرور لینوکس اجرا شود و هر ۵ دقیقه لیست تخفیف‌های بالای ۴۰ درصد در دسته‌های خاص را استخراج و به کانال شخصی ما فوروارد کند.',
     proposalsCount: 12,
@@ -141,7 +160,7 @@ const BRIDGE_FEED_POOL = [
     platform: 'پونیشا',
     platformKey: 'ponisha',
     category: 'وب اسکرپینگ / پایتون',
-    categoryKey: 'scraping',
+    categoryKey: 'automation',
     tags: ['Python', 'Torob API', 'Pandas', 'Web Scraping'],
     budget: 4800000,
     deadline: '۱ روز',
@@ -153,7 +172,7 @@ const BRIDGE_FEED_POOL = [
     platform: 'کارلانسر',
     platformKey: 'karlancer',
     category: 'ربات تلگرام / پایتون',
-    categoryKey: 'telegram',
+    categoryKey: 'automation',
     tags: ['Telegram Bot', 'yt-dlp', 'Asyncio', 'FFmpeg'],
     budget: 6200000,
     deadline: '۲ روز',
@@ -177,7 +196,7 @@ const BRIDGE_FEED_POOL = [
     platform: 'پونیشا',
     platformKey: 'ponisha',
     category: 'توسعه API / بک‌اند',
-    categoryKey: 'api',
+    categoryKey: 'dev',
     tags: ['WooCommerce API', 'FastAPI', 'SMS Webhook', 'Python'],
     budget: 5400000,
     deadline: '۱ روز',
@@ -200,31 +219,129 @@ const BRIDGE_FEED_POOL = [
 
 let feedIndex = 0;
 
+// ---------------------------------------------------------------------------
+// SPEC-004 — فید واقعی از اسکنر فقط‌خواندنی (scanner/out/projects.jsonl)
+// ---------------------------------------------------------------------------
+const SCAN_CONFIG = readScanConfig();
+/** فید ابری (اسکن روی رانرهای گیت‌هاب) — وقتی KONKLANCER_CLOUD_FEED_REPO تنظیم شده باشد فعال است. */
+const CLOUD_CONFIG = readCloudFeedConfig(process.env, process.cwd(), SCAN_CONFIG.outFile);
+/** شناسه پروژه‌هایی که یک‌بار به UI پوش شده‌اند؛ برای جلوگیری از پوش تکراری. */
+const emittedJobIds = new Set<string>();
 
-function keywordCategory(title: string, description: string): 'Frontend' | 'Backend' | 'DevOps' | 'Design' {
-  const text = `${title} ${description}`.toLowerCase();
-  if (/react|vue|angular|frontend|فرانت|html|css|tailwind|ui|جاوااسکریپت|next\.js/i.test(text)) return 'Frontend';
-  if (/devops|docker|داکر|kubernetes|کوبرنتیز|linux|لینوکس|ci\/cd|deploy|سرور|nginx/i.test(text)) return 'DevOps';
-  if (/design|طراحی|لوگو|figma|فیگما|فتوشاپ|photoshop|ui\/ux|گرافیک|بنر/i.test(text)) return 'Design';
-  return 'Backend';
+function emitBridgeLog(message: string, type: 'scan' | 'bid' | 'code' | 'github' | 'payment' = 'scan') {
+  io.emit('bridge:log', {
+    id: `log-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+    timestamp: new Date().toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' }),
+    type,
+    message,
+  });
 }
 
-async function categorizeJobServer(title: string, description: string): Promise<'Frontend' | 'Backend' | 'DevOps' | 'Design'> {
-  if (!readLLMConfig()) return keywordCategory(title, description);
-  try {
-    const prompt = `Categorize this freelance job into exactly one of: Frontend, Backend, DevOps, Design.
-Job Title: ${title}
-Job Description: ${description}
+/** فید فعلی را از خروجی JSONL اسکنر می‌سازد (بدون هیچ تماس شبکه‌ای). */
+function loadFeedJobs() {
+  const projects = readProjects(SCAN_CONFIG.outFile);
+  const feed = buildFeed(projects, {
+    include: SCAN_CONFIG.include,
+    exclude: SCAN_CONFIG.exclude,
+    // خالی بودن یعنی هیچ دسته‌ای محدود نشود: ترجمه، گرافیک، ویدیو، صدا و ... همه در فید می‌آیند.
+    categories: SCAN_CONFIG.categories,
+    minScore: SCAN_CONFIG.minScore,
+  });
+  return { projects, jobs: feed.jobs as FeedJob[], scannedAt: feed.scannedAt };
+}
 
-Return only JSON:
-{"tag": "Frontend" | "Backend" | "DevOps" | "Design"}`;
+function enabledTargets() {
+  return readScanTargets(SCAN_CONFIG.cwd).filter((target) => target.enabled);
+}
+
+interface ScanOutcome {
+  ok: boolean;
+  added: number;
+  total: number;
+  scannedAt: string | null;
+  message: string;
+  output?: string;
+}
+
+/** یک اسکن واقعی: CLI اسکنر را اجرا می‌کند، فید را می‌خواند و پروژه‌های تازه را پوش می‌کند. */
+async function performScan(): Promise<ScanOutcome> {
+  if (scannerBusy()) {
+    return { ok: false, added: 0, total: 0, scannedAt: null, message: 'یک اسکن دیگر در حال اجراست؛ لطفاً چند لحظه بعد تلاش کنید.' };
+  }
+  const enabled = enabledTargets();
+  if (SCAN_CONFIG.platforms.length === 0 && !SCAN_CONFIG.telegram) {
+    return {
+      ok: false,
+      added: 0,
+      total: 0,
+      scannedAt: null,
+      message: 'منبعی برای اسکن تنظیم نشده است: KONKLANCER_SCAN_PLATFORMS یا KONKLANCER_SCAN_TELEGRAM=1 را در .env بگذارید.',
+    };
+  }
+  if (enabled.length === 0) {
+    return {
+      ok: false,
+      added: 0,
+      total: 0,
+      scannedAt: null,
+      message: 'هیچ پلتفرم/کانالی فعال نیست. برای تلگرام: scan_enabled کانال را true کنید؛ برای پلتفرم: ابتدا انتخابگرهای CSS را کالیبره کنید (docs/PERSONAL-SETUP.md).',
+    };
+  }
+
+  emitBridgeLog(`اجرای اسکن فقط‌خواندنی روی ${enabled.length} منبع فعال...`);
+  const run = await runScanner(SCAN_CONFIG);
+  if (!run.ok) {
+    const tail = run.output.split('\n').map((line) => line.trim()).filter(Boolean).at(-1) ?? '';
+    const message = run.timedOut
+      ? 'اسکن به مهلت زمانی نرسید و متوقف شد.'
+      : tail || 'اسکن ناموفق بود.';
+    emitBridgeLog(`اسکن متوقف شد: ${message}`);
+    return { ok: false, added: 0, total: 0, scannedAt: null, message, output: run.output };
+  }
+
+  const { jobs, scannedAt, projects } = loadFeedJobs();
+  const fresh = jobs.filter((job) => !emittedJobIds.has(job.id));
+  for (const job of fresh) {
+    emittedJobIds.add(job.id);
+    io.emit('job:new', job);
+  }
+  const message = `اسکن تمام شد: ${fresh.length} پروژه جدید از ${projects.length} پروژه در فید.`;
+  emitBridgeLog(message);
+  return { ok: true, added: fresh.length, total: projects.length, scannedAt, message, output: run.output };
+}
+
+// اسکن دوره‌ای اختیاری برای استفاده شخصی (پیش‌فرض: خاموش)
+if (SCAN_CONFIG.intervalMinutes > 0) {
+  setInterval(() => {
+    performScan().catch((err) => console.warn('[scanner] scheduled scan failed:', err?.message ?? err));
+  }, SCAN_CONFIG.intervalMinutes * 60_000);
+}
+
+
+
+/**
+ * دسته‌بندی یک پروژه به یکی از دسته‌های مشترک (shared/taxonomy.json).
+ * قبلاً فقط Frontend/Backend/DevOps/Design بود و کارهای ترجمه/گرافیک/صدا دسته‌ی درست نمی‌گرفتند.
+ */
+async function categorizeJobServer(title: string, description: string): Promise<string> {
+  const fallback = categorize(title, description).key;
+  if (!readLLMConfig()) return fallback;
+  try {
+    const prompt = `دسته‌ی این پروژه‌ی فریلنسری را دقیقاً یکی از دسته‌های زیر انتخاب کن:
+${categoryPromptList()}
+
+عنوان: ${title}
+توضیحات: ${description}
+
+فقط JSON برگردان:
+{"category": "<key>"}`;
     const llm = await callLLM({ taskType: 'extraction', prompt, json: true, maxTokens: 64, temperature: 0 });
     const parsed = parseJsonLoose(llm.text) ?? {};
-    const valid = ['Frontend', 'Backend', 'DevOps', 'Design'];
-    return valid.includes(parsed.tag) ? (parsed.tag as any) : keywordCategory(title, description);
+    const valid = ALL_CATEGORIES.map((category) => category.key);
+    return valid.includes(parsed.category) ? (parsed.category as string) : fallback;
   } catch (err: any) {
     console.warn('AI categorization unavailable, using keyword rules:', err?.message ?? err);
-    return keywordCategory(title, description);
+    return fallback;
   }
 }
 
@@ -246,8 +363,9 @@ async function broadcastNewJob(customPayload?: any) {
   // Determine initial priority based on budget and complexity
   const priority = budget >= 6000000 ? 'High' : budget >= 4000000 ? 'Medium' : 'Low';
   
-  // Categorize tag using Gemini AI
-  const categorizedTag = await categorizeJobServer(template.title, template.description);
+  // دسته‌بندی با تاکسونومی مشترک (بدون فراخوانی شبکه‌ای؛ برچسب فارسی از همان منبع)
+  const categoryKey = template.categoryKey || categorize(template.title, template.description).key;
+  const categorizedTag = categoryLabel(categoryKey);
 
   const newJob = {
     id: newJobId,
@@ -261,9 +379,9 @@ async function broadcastNewJob(customPayload?: any) {
     budgetFormatted: `${budget.toLocaleString('fa-IR')} تومان`,
     deadline: template.deadline || '۱ روز',
     postedTime: 'هم‌اکنون (لحظه‌ای)',
-    category: template.category || 'وب اسکرپینگ / پایتون',
-    categoryKey: template.categoryKey || 'scraping',
-    tags: template.tags ? [...template.tags, categorizedTag] : ['Python', categorizedTag],
+    category: categoryLabel(categoryKey),
+    categoryKey: template.categoryKey || 'automation',
+    tags: template.tags ? [...template.tags, String(categorizedTag)] : ['Python', String(categorizedTag)],
     description: template.description,
     proposalsCount: 1,
     avgBid: Math.round(budget * 0.9),
@@ -291,7 +409,8 @@ io.on('connection', (socket) => {
   // Send initial connection handshake
   socket.emit('bridge:status', {
     connected: true,
-    activePlatforms: ['پونیشا', 'کارلانسر', 'پارسکدرز'],
+    activePlatforms: enabledTargets().map((target) => ({ name: target.name, status: 'active', latency: '—' })),
+    source: loadFeedJobs().projects.length > 0 ? 'scanner' : DEMO_FEED ? 'demo' : 'empty',
     clientsCount: io.engine.clientsCount,
   });
 
@@ -302,28 +421,20 @@ io.on('connection', (socket) => {
     message: 'اتصال فعال وب‌سوکت Socket.io به بریج دریافت آنی پروژه‌ها برقرار شد.',
   });
 
-  // Client requests a real-time scan trigger
-  socket.on('scan:trigger', () => {
-    socket.emit('bridge:log', {
-      id: `log-${Date.now()}`,
-      timestamp: new Date().toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' }),
-      type: 'scan',
-      message: 'بریج بک‌اند در حال دریافت آخرین آگهی‌های لحظه‌ای از وب‌هوک و فید پلتفرم‌ها...',
-    });
-
-    if (!DEMO_FEED) {
+  // Client requests a scan of the real, read-only scanner (SPEC-004).
+  socket.on('scan:trigger', async () => {
+    emitBridgeLog('درخواست اسکن زنده از رابط کاربری دریافت شد...');
+    const outcome = await performScan();
+    if (!outcome.ok) {
       socket.emit('bridge:log', {
         id: `log-${Date.now()}`,
         timestamp: new Date().toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' }),
         type: 'scan',
-        message: 'اسکنر واقعی هنوز به بریج متصل نیست؛ هیچ پروژه‌ی ساختگی تولید نشد.',
+        message: outcome.message,
       });
       return;
     }
-
-    setTimeout(() => {
-      broadcastNewJob();
-    }, 600);
+    socket.emit('scan:done', { added: outcome.added, total: outcome.total, scannedAt: outcome.scannedAt });
   });
 
   socket.on('disconnect', () => {
@@ -340,17 +451,100 @@ if (DEMO_FEED) {
   }, 45000);
 }
 
-// Endpoint: Trigger bridge broadcast via REST API
+// Endpoint: run one real, read-only scan of the configured sources (SPEC-004).
 app.post('/api/bridge/trigger-scan', async (_req: Request, res: Response) => {
-  if (!DEMO_FEED) {
-    // Real scanner integration is SPEC-004 (not yet implemented).
-    return res.json({ success: false, job: null, message: 'اسکنر واقعی هنوز متصل نیست (KONKLANCER_DEMO=0).' });
-  }
-  const job = await broadcastNewJob();
-  res.json({ success: true, job });
+  const outcome = await performScan();
+  res.status(outcome.ok ? 200 : 502).json({ ...outcome, success: outcome.ok, job: null });
 });
 
-// Endpoint: Categorize job into Frontend, Backend, DevOps, Design using Gemini
+// Endpoint: وضعیت فید ابری (اسکن روی رانرهای گیت‌هاب)
+app.get('/api/bridge/cloud', async (_req: Request, res: Response) => {
+  if (!CLOUD_CONFIG) {
+    return res.json({
+      success: true,
+      enabled: false,
+      message: 'فید ابری تنظیم نشده است؛ KONKLANCER_CLOUD_FEED_REPO را در .env بگذارید.',
+    });
+  }
+  try {
+    const status = await fetchCloudStatus(CLOUD_CONFIG);
+    const feedText = await fetchCloudFeedText(CLOUD_CONFIG);
+    return res.json({
+      success: true,
+      enabled: true,
+      repo: CLOUD_CONFIG.repo,
+      ref: CLOUD_CONFIG.ref,
+      hasToken: Boolean(CLOUD_CONFIG.token),
+      cloudProjects: feedText ? feedText.split('\n').filter(Boolean).length : 0,
+      // روشی که واقعاً استفاده شد: fetch نود یا CLI گیت‌هاب (محیط‌های با گواهی سفارشی)
+      transport: cloudTransport(),
+      status,
+    });
+  } catch (error: any) {
+    return res.status(502).json({ success: false, error: error?.message ?? 'خطای خواندن وضعیت ابری' });
+  }
+});
+
+// Endpoint: همگام‌سازی فید محلی با آخرین فید ابری (بدون اجرای اسکن)
+app.post('/api/bridge/sync-feed', async (_req: Request, res: Response) => {
+  if (!CLOUD_CONFIG) {
+    return res.status(400).json({ success: false, error: 'فید ابری تنظیم نشده است.' });
+  }
+  try {
+    const result = await syncCloudFeed(CLOUD_CONFIG);
+    if (result.written) {
+      emitBridgeLog(`فید ابری همگام شد: ${result.cloudProjects} پروژه‌ی ابری · کل ${result.totalProjects}`, 'scan');
+    }
+    return res.status(result.ok ? 200 : 502).json({ success: result.ok, ...result });
+  } catch (error: any) {
+    return res.status(502).json({ success: false, error: error?.message ?? 'همگام‌سازی فید ابری ناموفق بود' });
+  }
+});
+
+// Endpoint: درخواست اسکن ابری (اجرای اسکنر واقعی روی رانر گیت‌هاب) و سپس همگام‌سازی فید
+app.post('/api/bridge/cloud-scan', async (req: Request, res: Response) => {
+  if (!CLOUD_CONFIG) {
+    return res.status(400).json({ success: false, error: 'فید ابری تنظیم نشده است.' });
+  }
+  try {
+    const since = new Date().toISOString();
+    const request = await requestCloudScan(CLOUD_CONFIG, {
+      platforms: typeof req.body?.platforms === 'string' ? req.body.platforms : undefined,
+      pages: Number(req.body?.pages) || undefined,
+      telegram: req.body?.telegram === undefined ? undefined : Boolean(req.body.telegram),
+    });
+    if (!request.ok) return res.status(400).json({ success: false, ...request });
+
+    emitBridgeLog(request.message, 'scan');
+    res.status(202).json({ success: true, queued: true, message: request.message });
+
+    void (async () => {
+      try {
+        const status = await waitForCloudScan(CLOUD_CONFIG, since);
+        const synced = await syncCloudFeed(CLOUD_CONFIG);
+        emitBridgeLog(
+          synced.ok
+            ? `اسکن ابری تمام شد: ${synced.cloudProjects} پروژه‌ی ابری (${status?.projects_this_run ?? 0} در این اجرا)`
+            : `اسکن ابری تمام شد ولی فید تازه‌ای منتشر نشد: ${synced.message}`,
+          'scan',
+        );
+        io.emit('scan:done', {
+          added: status?.projects_this_run ?? synced.cloudProjects,
+          total: status?.projects_in_feed ?? synced.totalProjects,
+          scannedAt: status?.finished_at ?? new Date().toISOString(),
+          source: 'cloud',
+        });
+      } catch (error: any) {
+        emitBridgeLog(`پیگیری اسکن ابری ناموفق بود: ${error?.message ?? error}`, 'scan');
+      }
+    })();
+    return;
+  } catch (error: any) {
+    return res.status(502).json({ success: false, error: error?.message ?? 'درخواست اسکن ابری ناموفق بود' });
+  }
+});
+
+// Endpoint: دسته‌بندی پروژه با دسته‌های مشترک (shared/taxonomy.json)
 app.post('/api/categorize-job', async (req: Request, res: Response) => {
   try {
     const { title = '', description = '' } = req.body;
@@ -362,24 +556,69 @@ app.post('/api/categorize-job', async (req: Request, res: Response) => {
   }
 });
 
-// Endpoint: Get list of freelance jobs
+// Endpoint: Get the live job feed (SPEC-004).
+// منبع واقعی، خروجی JSONL اسکنر است. داده‌ی ساختگی فقط با KONKLANCER_DEMO=1 سرو می‌شود.
 app.get('/api/jobs', (_req: Request, res: Response) => {
-  res.json({ success: true, jobs: DEFAULT_JOBS });
+  const { projects, jobs, scannedAt } = loadFeedJobs();
+  if (projects.length > 0) {
+    jobs.forEach((job) => emittedJobIds.add(job.id));
+    return res.json({
+      success: true,
+      source: 'scanner',
+      scannedAt,
+      scannedProjects: projects.length,
+      minScore: SCAN_CONFIG.minScore,
+      categories: SCAN_CONFIG.categories,
+      // همه‌ی دسته‌های تاکسونومی (سطح داده، نه فیلتر) تا UI بتواند هر نوع کاری را نشان دهد.
+      availableCategories: describeCategories(),
+      // وقتی فهرست دسته خالی است، هیچ دسته‌ای حذف نمی‌شود (شامل کارهای غیرکدنویسی).
+      categoryFilter: SCAN_CONFIG.categories.length > 0 ? 'explicit' : 'all',
+      jobs,
+    });
+  }
+  if (DEMO_FEED) {
+    return res.json({ success: true, source: 'demo', scannedAt: null, jobs: DEFAULT_JOBS });
+  }
+  return res.json({
+    success: true,
+    source: 'empty',
+    scannedAt: null,
+    scannedProjects: 0,
+    jobs: [],
+    message: 'هنوز هیچ پروژه‌ای اسکن نشده است؛ راه‌اندازی: docs/PERSONAL-SETUP.md',
+  });
 });
 
-// Endpoint: Get real-time bridge status
+// Endpoint: Get real-time bridge status (وضعیت واقعی: کدام منبع فعال است و فید از کجاست)
 app.get('/api/bridge/status', (_req: Request, res: Response) => {
+  const { projects, jobs, scannedAt } = loadFeedJobs();
+  const targets = readScanTargets(SCAN_CONFIG.cwd);
+  const active = targets.filter((target) => target.enabled);
   res.json({
     success: true,
     status: {
       connected: true,
-      activePlatforms: [
-        { name: 'پونیشا', status: 'active', latency: '45ms' },
-        { name: 'کارلانسر', status: 'active', latency: '120ms' },
-        { name: 'پارسکدرز', status: 'active', latency: '85ms' }
-      ],
-      clientsCount: io.engine.clientsCount
-    }
+      source: projects.length > 0 ? 'scanner' : DEMO_FEED ? 'demo' : 'empty',
+      scannedProjects: projects.length,
+      feedJobs: jobs.length,
+      scannedAt,
+      scannerBusy: scannerBusy(),
+      scanPlatforms: SCAN_CONFIG.platforms,
+      scanTelegram: SCAN_CONFIG.telegram,
+      scanCategories: SCAN_CONFIG.categories,
+      autoCalibrate: SCAN_CONFIG.autoCalibrate,
+      cloudFeed: CLOUD_CONFIG
+        ? { enabled: true, repo: CLOUD_CONFIG.repo, ref: CLOUD_CONFIG.ref, hasToken: Boolean(CLOUD_CONFIG.token) }
+        : { enabled: false },
+      categories: describeCategories(),
+      includeKeywords: SCAN_CONFIG.include,
+      // سازگاری با پنل: فقط منابع فعال گزارش می‌شوند (بدون latency ساختگی)
+      activePlatforms: active.map((target) => ({ name: target.name, status: 'active', latency: '—' })),
+      inactivePlatforms: targets
+        .filter((target) => !target.enabled)
+        .map((target) => ({ name: target.name, reason: target.reason, kind: target.kind })),
+      clientsCount: io.engine.clientsCount,
+    },
   });
 });
 
@@ -576,8 +815,47 @@ async function startServer() {
 
   if (!readLLMConfig()) console.warn('[llm] KONKRED_GATEWAY_URL / KONKRED_API_KEY not set: AI endpoints return 503 AI_NOT_CONFIGURED');
 
+  // وضعیت اسکنر را در همان لحظه‌ی راه‌اندازی گزارش می‌دهیم تا برای استفاده‌ی شخصی معلوم باشد
+  // چه چیزی اسکن می‌شود و فید از کجاست (SPEC-004).
+  const enabled = enabledTargets();
+  const feed = loadFeedJobs();
+  console.log(
+    `[scanner] فید: ${SCAN_CONFIG.outFile} · ${feed.projects.length} پروژه در فایل · ${enabled.length} منبع فعال`,
+  );
+  if (CLOUD_CONFIG) {
+    console.log(
+      `[scanner] فید ابری فعال: ${CLOUD_CONFIG.repo}@${CLOUD_CONFIG.ref || 'default'} · توکن: ${CLOUD_CONFIG.token ? 'دارد' : 'ندارد'}`,
+    );
+    // اگر فید محلی خالی بود، یک‌بار از فید ابری پر می‌شود (شخصی‌سازی: بدون تنظیم دستی).
+    if (feed.projects.length === 0 && CLOUD_CONFIG.token) {
+      void syncCloudFeed(CLOUD_CONFIG)
+        .then((result) => {
+          console.log(`[scanner] ${result.message}`);
+          if (result.written) emitBridgeLog(`فید ابری در راه‌اندازی همگام شد: ${result.cloudProjects} پروژه`, 'scan');
+        })
+        .catch((error) => console.warn(`[scanner] همگام‌سازی فید ابری در راه‌اندازی ناموفق بود: ${error?.message ?? error}`));
+    }
+  }
+  if (enabled.length > 0) {
+    console.log(`[scanner] منابع فعال: ${enabled.map((t) => t.name).join(' · ')}`);
+  } else if (feed.projects.length > 0) {
+    // فایل فید از قبل داده دارد؛ فقط اسکن خودکار خاموش است (یا منابعش فعال نشده‌اند).
+    console.warn(
+      '[scanner] اسکن خودکار فعال نیست؛ فید فعلی فقط از فایل خوانده می‌شود. ' +
+        'برای افزودن داده‌ی تازه: docs/PERSONAL-SETUP.md (بخش‌های ۴ و ۵).',
+    );
+  } else {
+    console.warn(
+      '[scanner] هیچ منبعی فعال نیست و فایل فید هم خالی است؛ UI خالی می‌ماند. ' +
+        'راهنمای راه‌اندازی شخصی: docs/PERSONAL-SETUP.md',
+    );
+  }
+  if (SCAN_CONFIG.intervalMinutes > 0) {
+    console.log(`[scanner] اسکن خودکار هر ${SCAN_CONFIG.intervalMinutes} دقیقه فعال است.`);
+  }
+
   httpServer.listen(PORT, '0.0.0.0', () => {
-    console.log(`FreelanceFlow AI Server & Socket.io Bridge running at http://localhost:${PORT}`);
+    console.log(`Konklancer server & Socket.io bridge running at http://localhost:${PORT}`);
   });
 }
 

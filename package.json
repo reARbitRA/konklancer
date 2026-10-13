@@ -11,6 +11,8 @@
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
     "test:scanner": "python3 -m pytest -q scanner/tests",
+    "scan": "python3 -m scanner.konklancer_scan scan",
+    "scan:telegram": "python3 -m scanner.konklancer_scan scan --telegram",
     "test": "tsx --test server/*.test.ts"
   },
   "dependencies": {

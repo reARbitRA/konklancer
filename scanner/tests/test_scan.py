@@ -125,3 +125,183 @@ def test_cli_parse_file_filters_on_comma_separated_keywords(capsys):
     assert "توسعه ربات تلگرام با پایتون" in out
     assert "ترجمه مقاله" not in out
     assert "3 مورد تجزیه شد، 1 مورد پس از فیلتر" in out
+
+
+# ---------------------------------------------------------------------------
+# فعال/غیرفعال کردن منابع (برای راه‌اندازی شخصی)
+# ---------------------------------------------------------------------------
+def _write_registry(tmp_path):
+    registry = tmp_path / "platforms.json"
+    registry.write_text(
+        json.dumps(
+            {
+                "platforms": [
+                    {"id": "parscoders", "name": "پارس‌کدرز", "status": "active", "scan_enabled": False},
+                    {"id": "ponisha", "name": "پونیشا", "status": "active", "scan_enabled": False,
+                     "scan_selectors": {"item": ".x", "title": ".y"}},
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    return registry
+
+
+def _write_channels(tmp_path):
+    channels = tmp_path / "telegram_sources.json"
+    channels.write_text(
+        json.dumps({"channels": [{"username": "workarc", "title": "فریلنسری", "scan_enabled": False}]}),
+        encoding="utf-8",
+    )
+    return channels
+
+
+def test_enable_telegram_flips_the_flag(tmp_path, monkeypatch, capsys):
+    channels = _write_channels(tmp_path)
+    monkeypatch.setattr(ks, "TELEGRAM_PATH", channels)
+
+    assert ks.main(["enable", "--telegram", "workarc"]) == 0
+    assert json.loads(channels.read_text(encoding="utf-8"))["channels"][0]["scan_enabled"] is True
+    assert "فعال شد" in capsys.readouterr().out
+
+    assert ks.main(["disable", "--telegram", "workarc"]) == 0
+    assert json.loads(channels.read_text(encoding="utf-8"))["channels"][0]["scan_enabled"] is False
+
+
+def test_enable_platform_requires_selectors(tmp_path, monkeypatch):
+    registry = _write_registry(tmp_path)
+    monkeypatch.setattr(ks, "REGISTRY_PATH", registry)
+
+    # بدون انتخابگر CSS، فعال‌سازی باید با پیام روشن رد شود
+    try:
+        ks.main(["enable", "--platform", "parscoders"])
+    except SystemExit as exc:
+        assert "انتخابگر" in str(exc)
+    else:
+        raise AssertionError("باید رد می‌شد")
+
+    # با انتخابگر موجود، فعال می‌شود
+    assert ks.main(["enable", "--platform", "ponisha"]) == 0
+    platforms = json.loads(registry.read_text(encoding="utf-8"))["platforms"]
+    assert [p["scan_enabled"] for p in platforms] == [False, True]
+
+
+def test_toggle_requires_exactly_one_target(tmp_path, monkeypatch):
+    monkeypatch.setattr(ks, "REGISTRY_PATH", _write_registry(tmp_path))
+    monkeypatch.setattr(ks, "TELEGRAM_PATH", _write_channels(tmp_path))
+    for argv in (["enable"], ["enable", "--platform", "ponisha", "--telegram", "workarc"]):
+        try:
+            ks.main(argv)
+        except SystemExit as exc:
+            assert "دقیقاً یکی" in str(exc)
+        else:
+            raise AssertionError("باید رد می‌شد")
+
+
+def test_list_shows_platforms_and_channels(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(ks, "REGISTRY_PATH", _write_registry(tmp_path))
+    monkeypatch.setattr(ks, "TELEGRAM_PATH", _write_channels(tmp_path))
+    assert ks.main(["list"]) == 0
+    out = capsys.readouterr().out
+    assert "پارس‌کدرز" in out and "@workarc" in out and "بدون نامزد" in out
+
+
+def test_parse_file_can_append_to_the_feed(tmp_path, capsys):
+    out = tmp_path / "projects.jsonl"
+    rc = ks.main([
+        "parse-file", "--platform", "parscoders",
+        "--html", str(FIX / "listing_sample.html"),
+        "--selectors-json", json.dumps({"item": ".project-item", "title": ".project-title", "summary": ".project-desc"}),
+        "--include", "پایتون,python",
+        "--out", str(out),
+    ])
+    assert rc == 0
+    assert "1 مورد جدید در" in capsys.readouterr().out
+    lines = [json.loads(line) for line in out.read_text(encoding="utf-8").splitlines()]
+    assert len(lines) == 1 and lines[0]["source"] == "parscoders"
+
+    # اجرای دوباره نباید رکورد تکراری بسازد
+    ks.main([
+        "parse-file", "--platform", "parscoders",
+        "--html", str(FIX / "listing_sample.html"),
+        "--selectors-json", json.dumps({"item": ".project-item", "title": ".project-title", "summary": ".project-desc"}),
+        "--include", "پایتون,python",
+        "--out", str(out),
+    ])
+    assert len(out.read_text(encoding="utf-8").splitlines()) == 1
+
+
+def test_parse_telegram_file_writes_to_the_feed(tmp_path, capsys):
+    out = tmp_path / "projects.jsonl"
+    rc = ks.main([
+        "parse-telegram-file", "--channel", "chan",
+        "--html", str(FIX / "telegram_preview.html"),
+        "--out", str(out),
+    ])
+    assert rc == 0
+    assert "1 پیام تجزیه شد" in capsys.readouterr().out
+    record = json.loads(out.read_text(encoding="utf-8").splitlines()[0])
+    assert record["source"] == "telegram:chan" and record["url"] == "https://t.me/chan/10"
+
+
+def test_robots_network_failure_reports_a_clear_reason():
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("no route to host", request=request)
+
+    with ks.make_client(httpx.MockTransport(handler)) as client:
+        robots = ks.RobotsCache(client)
+        try:
+            ks.fetch_html(client, robots, ks.RateLimiter(0), "https://offline.example/list", "offline.example")
+        except PermissionError as exc:
+            assert "خطای شبکه" in str(exc)
+            assert robots.block_reason("offline.example") == "network"
+        else:
+            raise AssertionError("باید متوقف می‌شد")
+
+
+def test_robots_disallow_reason_is_reported():
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/robots.txt":
+            return httpx.Response(200, text="User-agent: *\nDisallow: /s/\n")
+        return httpx.Response(200, text="ok")
+
+    with ks.make_client(httpx.MockTransport(handler)) as client:
+        robots = ks.RobotsCache(client)
+        try:
+            ks.fetch_html(client, robots, ks.RateLimiter(0), "https://tg.example/s/chan", "tg.example")
+        except PermissionError as exc:
+            assert "ممنوع کرده است" in str(exc)
+        else:
+            raise AssertionError("باید متوقف می‌شد")
+
+
+def test_same_domain_ignores_port_and_www():
+    """رگرسیون باگ واقعی: ریدایرکت همان میزبان با پورت دیگر «دامنه‌ی خارج» تشخیص داده می‌شد."""
+    assert ks._same_domain("127.0.0.1:8123", "127.0.0.1")
+    assert ks._same_domain("parscoders.com:443", "parscoders.com")
+    assert ks._same_domain("www.karlancer.com", "karlancer.com")
+    assert ks._same_domain("cdn.karlancer.com", "karlancer.com")
+    assert not ks._same_domain("evil.example", "karlancer.com")
+    assert not ks._same_domain("notkarlancer.com", "karlancer.com")
+    assert not ks._same_domain("", "karlancer.com")
+
+
+def test_category_is_written_into_the_feed(tmp_path):
+    """فید باید دسته‌ی هر پروژه را داشته باشد تا فیلتر دسته‌ای UI روی داده‌ی واقعی کار کند."""
+    import json as _json
+
+    out = tmp_path / "feed.jsonl"
+    selectors = {"item": ".project-card", "title": "a[href]", "link": "a[href]"}
+    rc = ks.main([
+        "parse-file",
+        "--platform", "parscoders",
+        "--html", str(FIX / "listing_sample_cards.html"),
+        "--selectors-json", _json.dumps(selectors, ensure_ascii=False),
+        "--out", str(out),
+    ])
+    assert rc == 0
+    rows = [_json.loads(line) for line in out.read_text(encoding="utf-8").splitlines() if line.strip()]
+    assert rows, "باید رکورد نوشته شود"
+    assert all(row.get("category") for row in rows)
+    keys = {row["category"] for row in rows}
+    assert {"translation", "graphic"} <= keys, keys

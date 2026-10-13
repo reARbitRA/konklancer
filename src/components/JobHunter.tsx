@@ -15,6 +15,7 @@ import {
   DollarSign
 } from 'lucide-react';
 import { FreelanceJob, PlatformKey, CategoryKey } from '../types';
+import { ALL_CATEGORIES, categoryLabel, categoryAiFit, detectCategory } from '../../shared/taxonomy';
 
 interface JobHunterProps {
   jobs: FreelanceJob[];
@@ -75,8 +76,8 @@ export const JobHunter: React.FC<JobHunterProps> = ({
       clientReviews: 10,
       deadline: 'امروز',
       postedTime: 'هم‌اکنون',
-      category: 'پروژه سفارشی',
-      categoryKey: 'automation',
+      category: categoryLabel(detectCategory(manualTitle, manualDesc).key),
+      categoryKey: detectCategory(manualTitle, manualDesc).key,
       tags: ['Custom Job', 'Instant AI'],
       proposalsCount: 1,
       avgBid: budgetNum,
@@ -152,19 +153,17 @@ export const JobHunter: React.FC<JobHunterProps> = ({
         </div>
       </div>
 
-      {/* Category Filter Pills (Functional Buttons) */}
+      {/* Category Filter Pills — از shared/taxonomy.json ساخته می‌شود: هر چیزی که AI می‌تواند تولید کند */}
       <div className="flex flex-wrap items-center gap-1.5 pt-1">
-        <span className="text-[11px] text-slate-400 ml-2">دسته‌بندی پردرآمد:</span>
-        {(
-          [
-            { key: 'all', label: 'همه' },
-            { key: 'scraping', label: 'وب اسکرپینگ' },
-            { key: 'telegram', label: 'ربات تلگرام' },
-            { key: 'data', label: 'اکسل و دیتا' },
-            { key: 'api', label: 'توسعه API' },
-            { key: 'automation', label: 'اتوماسیون' },
-          ] as const
-        ).map((cat) => (
+        <span className="text-[11px] text-slate-400 ml-2">دسته‌بندی کارها:</span>
+        {[
+          { key: 'all' as CategoryKey, label: 'همه' },
+          ...ALL_CATEGORIES.filter((category) => category.key !== 'other').map((category) => ({
+            key: category.key as CategoryKey,
+            label: category.fa,
+            aiFit: category.aiFit,
+          })),
+        ].map((cat) => (
           <button
             key={cat.key}
             onClick={() => setSelectedCategory(cat.key)}
@@ -233,19 +232,21 @@ export const JobHunter: React.FC<JobHunterProps> = ({
                     </span>
                   )}
 
-                  {job.categorizedTag && (
+                  {(job.categoryKey || job.category) && (
                     <span
-                      className={`px-2 py-0.5 rounded text-[10px] font-mono border ${
-                        job.categorizedTag === 'Frontend'
-                          ? 'bg-sky-500/10 text-sky-300 border-sky-500/30'
-                          : job.categorizedTag === 'Backend'
-                          ? 'bg-indigo-500/10 text-indigo-300 border-indigo-500/30'
-                          : job.categorizedTag === 'DevOps'
-                          ? 'bg-orange-500/10 text-orange-300 border-orange-500/30'
-                          : 'bg-pink-500/10 text-pink-300 border-pink-500/30'
-                      }`}
+                      className="px-2 py-0.5 rounded text-[10px] border bg-indigo-500/10 text-indigo-200 border-indigo-500/30"
+                      title={`دسته‌ی کار · تناسب با AI: ${categoryAiFit(job.categoryKey)}/10`}
                     >
-                      {job.categorizedTag}
+                      {categoryLabel(job.categoryKey) || job.category}
+                    </span>
+                  )}
+
+                  {typeof job.score === 'number' && (
+                    <span
+                      title={job.scoreReasons?.join(' · ') ?? undefined}
+                      className="rounded border border-slate-700/80 bg-slate-800/70 px-2 py-0.5 font-mono text-[10px] text-slate-300"
+                    >
+                      امتیاز فید: {job.score.toLocaleString('fa-IR')}
                     </span>
                   )}
 
@@ -302,6 +303,19 @@ export const JobHunter: React.FC<JobHunterProps> = ({
                 </div>
 
                 <div className="flex items-center gap-2">
+                  {/* Open the original listing (SPEC-004: پروژه‌ها از اسکنر عمومی می‌آیند) */}
+                  {job.url && (
+                    <a
+                      href={job.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-700/80 rounded-lg text-xs font-medium transition-colors"
+                    >
+                      <ExternalLink className="h-3.5 w-3.5 text-slate-400" />
+                      <span>صفحه‌ی پروژه</span>
+                    </a>
+                  )}
+
                   {/* Start Agent Code Solution */}
                   <button
                     onClick={() => onSelectJobForCoding(job)}

@@ -1,10 +1,13 @@
 export type PlatformKey = 'all' | 'ponisha' | 'karlancer' | 'parskoders' | 'global';
 
-export type CategoryKey = 'all' | 'scraping' | 'telegram' | 'data' | 'api' | 'automation';
+// کلید دسته = کلیدهای shared/taxonomy.json (ترجمه، گرافیک، ویدیو، صدا، داده، کد و ...).
+// 'all' یعنی «بدون محدودیت دسته».
+export type CategoryKey = 'all' | (string & {});
 
 export type PriorityLevel = 'High' | 'Medium' | 'Low';
 
-export type JobCategoryTag = 'Frontend' | 'Backend' | 'DevOps' | 'Design';
+// برچسب دسته‌بندی؛ حالا برچسب فارسی هر دسته‌ی تاکسونومی است، نه فقط چهار تگ کدنویسی.
+export type JobCategoryTag = string;
 
 export interface FreelanceJob {
   id: string;
@@ -28,6 +31,12 @@ export interface FreelanceJob {
   priority?: PriorityLevel;
   categorizedTag?: JobCategoryTag;
   completedAt?: string; // ISO date e.g. '2026-10-09'
+  // SPEC-004: فیلدهایی که از خروجی اسکنر می‌آیند
+  url?: string; // لینک صفحه‌ی اصلی پروژه روی پلتفرم
+  source?: string; // منبع اسکن (مثلاً 'parscoders' یا 'telegram:workarc')
+  score?: number; // امتیاز پیش‌فیلتر قاعده‌محور (۰ تا ۱۰۰)
+  scoreReasons?: string[]; // دلایل امتیاز، برای نمایش شفاف
+  scrapedAt?: string; // زمان اسکن (ISO)
   aiAnalysis?: AIAnalysis;
   proposal?: string;
   proposedPrice?: number;

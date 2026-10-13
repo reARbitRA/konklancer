@@ -219,17 +219,42 @@ export const AutoPilotPanel: React.FC<AutoPilotPanelProps> = ({
         {/* Quick Launch & Radar pulse */}
         <div className="p-5 bg-slate-900 border border-slate-800 rounded-xl flex flex-col justify-between">
           <div className="space-y-2">
-            <span className="text-xs text-slate-400 font-medium block">پوشش لحظه‌ای پلتفرم‌ها:</span>
+            <span className="text-xs text-slate-400 font-medium block">
+              فید واقعی اسکنر (SPEC-004):
+            </span>
             <div className="space-y-1.5 text-xs">
               {bridgeStatus ? (
-                bridgeStatus.activePlatforms.map((p: any) => (
-                  <div key={p.name} className="flex items-center justify-between text-slate-300">
-                    <span>{p.name}:</span>
-                    <span className="text-emerald-400 font-mono">
-                      {p.status === 'active' ? 'متصل' : 'قطع'} · {p.latency}
+                <>
+                  <div className="flex items-center justify-between text-slate-300">
+                    <span>منبع فید:</span>
+                    <span className="font-mono text-emerald-400">
+                      {bridgeStatus.source === 'scanner'
+                        ? 'اسکنر واقعی'
+                        : bridgeStatus.source === 'demo'
+                          ? 'داده‌ی نمایشی'
+                          : 'خالی (هنوز اسکن نشده)'}
                     </span>
                   </div>
-                ))
+                  <div className="flex items-center justify-between text-slate-300">
+                    <span>پروژه‌های فید:</span>
+                    <span className="font-mono text-slate-200">
+                      {(bridgeStatus.feedJobs ?? 0).toLocaleString('fa-IR')} از{' '}
+                      {(bridgeStatus.scannedProjects ?? 0).toLocaleString('fa-IR')} اسکن‌شده
+                    </span>
+                  </div>
+                  {bridgeStatus.activePlatforms?.length > 0 ? (
+                    bridgeStatus.activePlatforms.map((p: any) => (
+                      <div key={p.name} className="flex items-center justify-between text-slate-300">
+                        <span>{p.name}:</span>
+                        <span className="font-mono text-emerald-400">فعال</span>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="text-amber-300/90">
+                      هیچ منبعی فعال نیست — راهنما: docs/PERSONAL-SETUP.md
+                    </p>
+                  )}
+                </>
               ) : (
                 <p className="text-slate-500 italic">در حال دریافت وضعیت...</p>
               )}
