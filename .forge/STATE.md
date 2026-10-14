@@ -1,36 +1,39 @@
-# STATE — as of 2026-10-12
-## Milestone: M1 (Features) + Safety hardening + LLM gateway + Personal mode (فید واقعی)
-## Specs
-- SPEC-001, SPEC-002: DRAFT (کد پیاده شده، ولی سند تأیید نشده)
-- SPEC-003 Safety & Hardening: APPROVED (T-003 DOING؛ R5 API auth و R7 حذف فایل قدیمی باز)
-- SPEC-004 Live Feed: APPROVED (T-004: R2/R4/R5/R6 انجام شد؛ R7 اعلان تلگرام باز)
-- SPEC-005 Outcome Tracking: APPROVED (T-005 OPEN — نه SQLite، نه /api/bids، نه /api/stats)
-- SPEC-006 LLM via Konkred gateway: APPROVED (T-006 DONE)
-- SPEC-007 Personal mode: **DRAFT — پیاده‌سازی شده، منتظر تأیید مالک** (T-007 DONE)
-## Decisions (user)
-- 2026-10-10: Gemini فقط از konklancer حذف شد؛ privacy=any؛ fusion=normalization.
-- 2026-10-12: حالت شخصی = فید واقعی اسکنر، بدون داده‌ی ساختگی در مسیر پیش‌فرض؛ مسیر «ذخیره‌ی صفحه در مرورگر» به‌عنوان راه بی‌دردسرِ جمع‌آوری داده.
-## Next up (ordered)
-1. تأیید SPEC-007 (Q1) و سپس SPEC-001/002 را از DRAFT خارج کن یا کد را با سند هم‌راست کن.
-2. T-004 R7: اعلان اختیاری تلگرام برای پروژه‌های بالای آستانه.
-3. T-003 R5: احراز هویت `/api/*` (+ هدر در فرانت) برای اینکه سرور را بتوان روی شبکه گذاشت.
-4. T-005: SQLite + `POST /api/bids` + `GET /api/stats` (تمایز اصلی محصول و مبنای قیمت‌گذاری).
-5. کالیبراسیون انتخابگر یک پلتفرم واقعی (parscoders/ponisha) و ثبت آن در platforms.json.
-## Known issues
-- `npm install` به `--legacy-peer-deps` نیاز دارد؛ `vite.config.ts` از `__dirname` استفاده می‌کند (هشدار Vite).
-- دکمه‌ی «اجرای تست» در CodeWorkspace شبیه‌سازی‌شده است و باید حذف یا واقعی شود.
-- `freelance_pro_engine.py` هنوز در ریشه است (اجرا نمی‌شود؛ حذفش تصمیم مالک است).
-- احراز هویت ندارد؛ پیش‌فرض فقط برای اجرای محلی شخصی مناسب است.
+# STATE — 2026-10-14
 
-## 2026-10-12 (session-005): اسکن همه‌ی دسته‌ها + خودکالیبراسیون DOM
-- دامنه‌ی اسکن از «کد/ربات» به همه‌ی دسته‌های قابل تولید با AI باز شد (`shared/taxonomy.json`، منبع واحد سه‌لایه).
-- مسیر واقعی اسکن: `autoscan` (زنده + کشف ساختار) / `probe --save` / `autoscan --html` (مرورگر).
-- **باز و مهم:** تأیید انتخابگرها روی HTML زنده باید روی کامپیوتر کاربر انجام شود؛ این محیط به سایت‌ها TCP ندارد.
-- **باز:** Playwright برای سایت‌های JS-محور (کارلنسر) پیاده نشده.
+## Current branch
+`arena/5d0e28b1-konklancer` (session-fixed; push only here).
 
-### اسکنر — کالیبراسیون واقعی و مسیر ابری (2026-10-12)
-- انتخابگرهای کارلنسر/پونیشا روی HTML واقعی تأیید و در `platforms.json` ثبت شد (`scan_selectors_verified`).
-- گارد «آیتم ناوبری نیست» + الگوی مسیر پروژه (`project_path_pattern`) + دستور `prune`؛ ۴۷ ردیف زباله از فید واقعی حذف شد (۱۵۵→۱۰۸).
-- مسیر شبکه‌ی کامل دومرتبه اثبات شد: روی سایت آزمایشی محلی (`http://127.0.0.1:8123`) ربات‌ها/robots خوانده شد، ساختار خودکار کشف شد (`main.listing > div`, امتیاز ۸۶٫۸) و ۶ پروژه با بودجه/پیشنهاد/زمان و دسته‌های گرافیک/ترجمه/اتوماسیون/مستندسازی/ویدیو/صدا نوشته شد.
-- مسیر ابری: `POST /api/bridge/cloud-scan` → کامیت `scan-request.json` → رانر گیت‌هاب. باگ: پیام کامیت `[skip ci]` داشت و ورک‌فلو اجرا نمی‌شد؛ اصلاح شد.
-- محیط سندباکس: `fetch` نود گواهی TLS را تأیید نمی‌کند → مسیر پشتیبان `gh api` اضافه شد؛ `transport` در `/api/bridge/cloud` گزارش می‌شود.
+## User goal and blockers
+User wants the personal app actually usable in this sandbox, especially **fresh scanning + real AI**.
+User explicitly selected **no provider key and no running gateway**. Do not describe AI as enabled.
+The environment's outbound allowlist does not include LLM providers or the freelance sites.
+GitHub cloud scanning is now verified working. AI still requires a provider account/key and a reachable deployment path.
+GitHub Models is not an alternative: official github/docs content says retired July 30, 2026.
+Gateway repo `reARbitRA/konkred-AI-ecosystem` is public, but code is not credentials. No keys were found or requested in chat.
+
+## Verified implementation
+- SPEC-003 R5: Bearer auth for all `/api/*`, Socket.io handshake token, sessionStorage login gate + lock button, same-origin API helper. No-token development binds loopback; production refuses startup without token. Tokens are never bundled or committed.
+- SPEC-004: scanner regression test corrected for a real listing without a public budget. Live captures go to artifacts rather than overwriting regression fixtures. Workflow concurrency is per branch.
+- Cloud UI waits for a **fresh** finished result (server `since`), checks workflow failure, rejects duplicate requests, and doesn't show stale success on timeout.
+- When cloud config is enabled, the UI's normal scan button routes to the cloud scan.
+- Runtime preview: production Express + static frontend + Socket.io on port 3000. `.env`, data/projects.jsonl and access instructions in data/PREVIEW-ACCESS.md are private/ignored, not durable configuration. Restore these after sandbox rebuild if absent.
+- Cloud feed configured for this branch only, with existing sandbox GitHub authentication (no stored/copied GitHub token).
+
+## Verification
+- `npm test`: 29/29.
+- `npm run lint`: pass after installing the separate mobile dependencies with `npm ci --prefix mobile --legacy-peer-deps` (root tsc includes the mobile config).
+- `npm run build`: pass, existing chunk-size/Vite warnings remain.
+- `npm run test:scanner`: 54/54.
+- Live HTTP: public login HTML 200; unauthenticated API 401; authorized 152-job scanner feed; cloud status + sync 200; unknown API 404; AI 503 AI_NOT_CONFIGURED (honest blocker).
+- Authenticated live Socket.io handshake passed; auth tests cover websocket and polling rejection/acceptance.
+- Cloud run 38549319588: success, **61 records read** (parscoders 23, telegram:workarc 18, telegram:freelancer_projects 20), 152 cumulative records. Ponisha/Karlancer listing paths returned 404.
+- App-triggered end-to-end run 38550794363 succeeded after `/api/bridge/cloud-scan`; duplicate request correctly rejected with 409. Auto-sync delivered **154** cumulative jobs with scrapedAt newer than request. No manual sync was needed.
+
+## Remaining scope / specs
+- SPEC-001/002/007 still DRAFT; no blanket claim that all their functionality is complete.
+- SPEC-003 R7 legacy engine deletion still awaits owner decision. Never run it.
+- SPEC-004 R7 Telegram notifications still open. Site coverage incomplete.
+- SPEC-005 SQLite/outcome tracking still OPEN; pipeline state remains localStorage.
+- SPEC-006 actual provider inference is BLOCKED, not verified live. Do not substitute mock answers.
+- CodeWorkspace test button still simulated; do not claim generated code was executed.
+- Preview isn't permanent hosting. Mobile npm audit reported 3 moderate issues (separate wrapper, not production web dependencies).

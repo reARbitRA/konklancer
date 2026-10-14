@@ -6,7 +6,7 @@
 - SPEC-003 R4 → server.ts DEFAULT_JOBS, src/data/mockJobs.ts
 - SPEC-003 R6 → App.tsx autoStart={false}
 - SPEC-004 R1 → server.ts DEMO_FEED
-- SPEC-003 R5, R7 → not yet (T-003 / Q1)
+- SPEC-003 R5 → implemented 2026-10-14 (see below); R7 still awaits Q1
 - SPEC-006 → server/llm.ts (callLLM, isMockModel, readLLMConfig), server/llm.test.ts (7 tests), server.ts (4 call sites, sendLLMError), .env.example
 - SPEC-006 R4 (mock guard) → server/llm.ts isMockModel + test "mock simulator answer is rejected"
 - SPEC-006 R7 (cache) → server/llm.ts cacheKey + test "cacheKey"
@@ -28,3 +28,10 @@
 - تصمیم‌ها: (۱) دسته فقط متادیتا/فیلتر صریح است، نه گیت؛ (۲) کشف ساختار از خود DOM، نه هاردکد؛ (۳) مسیر HTML مرورگر به‌عنوان تضمین‌گاه همیشه در دسترس؛ (۴) ادعای تأییدنشده بودن نامزدها در کد و مستندات.
 - شواهد: pytest 33/33، npm test 24/24، tsc/build سالم، E2E آفلاین با فیکسچرهای کارت/جدول/SPA.
 - محدودیت صریح: صفر تماس موفق با سایت واقعی در این محیط؛ تأیید زنده = وظیفه‌ی کاربر روی ماشین خودش.
+
+## 2026-10-14 — personal preview / fresh cloud scan
+- SPEC-003 R5 → server/auth.ts + server/auth.test.ts; server.ts middleware/binding; src/utils/api.ts; PersonalAccess.tsx; frontend API + Socket.io credentials.
+- SPEC-004 live feed → scanner/tests/test_live_fixtures.py (genuinely absent budget), scanner-feed.yml (stable fixtures + per-ref concurrency).
+- SPEC-004 request/result integrity → shared/cloudScan.ts, waitForCloudScan, server cloud lock/since/failure handling, App.tsx fresh-status check and quick-scan routing.
+- Live evidence → Actions runs 38549319588 and 38550794363, protected running server on port 3000.
+- SPEC-006 → no fabricated implementation claim; live access blocked by absent provider credentials and restricted outbound network. User selected no key/no running gateway.
