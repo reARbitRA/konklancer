@@ -102,7 +102,14 @@ def test_parscoders_verified_selectors_parse_real_listing():
     assert len(items) == 25, f"انتظار ۲۵ پروژه‌ی یکتا، دریافت {len(items)}"
     assert len({item.url for item in items}) == len(items)
     assert all(re.match(r"^/project/\d+/", urlpath(item.url)) for item in items), "مسیرهای /project/skills/ نباید پروژه حساب شوند"
-    assert all("بودجه" in item.budget_text for item in items)
+    # The real page contains one project with no public budget (620396).
+    # Missing optional data must remain empty, not break every scheduled scan.
+    with_budget = [item for item in items if item.budget_text]
+    assert len(with_budget) == 24
+    assert all("بودجه" in item.budget_text for item in with_budget)
+    without_budget = [item for item in items if not item.budget_text]
+    assert len(without_budget) == 1
+    assert urlpath(without_budget[0].url).startswith('/project/620396/')
     assert all("پیشنهاد" in item.bids_text for item in items)
     assert not NAV_TITLES & {item.title for item in items}
 
