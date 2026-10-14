@@ -1,3 +1,4 @@
+import { apiFetch as fetch } from './api';
 import { JobCategoryTag } from '../types';
 import { ALL_CATEGORIES, detectCategory, type CategoryMeta } from '../../shared/taxonomy';
 

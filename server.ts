@@ -6,6 +6,7 @@ import dotenv from 'dotenv';
 import { Server as SocketIOServer } from 'socket.io';
 import { callLLM, LLMError, parseJsonLoose, readLLMConfig } from './server/llm';
 import { checkContent } from './server/contentFilter';
+import { listenHost, requireApiToken, requireSocketToken } from './server/auth';
 import { ALL_CATEGORIES, categoryLabel, categoryPromptList } from './shared/taxonomy';
 import {
   buildFeed,
@@ -35,6 +36,10 @@ const app = express();
 const httpServer = http.createServer(app);
 const PORT = process.env.PORT ? parseInt(process.env.PORT) : 3000;
 
+const API_TOKEN = process.env.KONKLANCER_API_TOKEN?.trim() || '';
+const HOST = listenHost(API_TOKEN, process.env.NODE_ENV === 'production');
+if (!API_TOKEN) console.warn('[auth] No API token: development access is loopback-only.');
+
 // Setup Socket.io Server attached to HTTP Server
 const io = new SocketIOServer(httpServer, {
   cors: {
@@ -43,6 +48,8 @@ const io = new SocketIOServer(httpServer, {
   },
 });
 
+io.use(requireSocketToken(API_TOKEN));
+app.use('/api', requireApiToken(API_TOKEN));
 app.use(express.json({ limit: '10mb' }));
 
 // AI access: see server/llm.ts (SPEC-006). No provider SDK is used here.
@@ -502,10 +509,13 @@ app.post('/api/bridge/sync-feed', async (_req: Request, res: Response) => {
 });
 
 // Endpoint: درخواست اسکن ابری (اجرای اسکنر واقعی روی رانر گیت‌هاب) و سپس همگام‌سازی فید
+let cloudScanBusy = false;
 app.post('/api/bridge/cloud-scan', async (req: Request, res: Response) => {
   if (!CLOUD_CONFIG) {
     return res.status(400).json({ success: false, error: 'فید ابری تنظیم نشده است.' });
   }
+  if (cloudScanBusy) return res.status(409).json({ success: false, error: 'یک اسکن ابری در حال اجراست.' });
+  cloudScanBusy = true;
   try {
     const since = new Date().toISOString();
     const request = await requestCloudScan(CLOUD_CONFIG, {
@@ -513,15 +523,20 @@ app.post('/api/bridge/cloud-scan', async (req: Request, res: Response) => {
       pages: Number(req.body?.pages) || undefined,
       telegram: req.body?.telegram === undefined ? undefined : Boolean(req.body.telegram),
     });
-    if (!request.ok) return res.status(400).json({ success: false, ...request });
+    if (!request.ok) {
+      cloudScanBusy = false;
+      return res.status(400).json({ success: false, ...request });
+    }
 
     emitBridgeLog(request.message, 'scan');
-    res.status(202).json({ success: true, queued: true, message: request.message });
+    res.status(202).json({ success: true, queued: true, since, message: request.message });
 
     void (async () => {
       try {
         const status = await waitForCloudScan(CLOUD_CONFIG, since);
+        if (status?.job_status !== 'success') throw new Error('اجرای ابری ناموفق بود؛ گزارش اجرا را بررسی کنید.');
         const synced = await syncCloudFeed(CLOUD_CONFIG);
+        if (!synced.ok) throw new Error(synced.message);
         emitBridgeLog(
           synced.ok
             ? `اسکن ابری تمام شد: ${synced.cloudProjects} پروژه‌ی ابری (${status?.projects_this_run ?? 0} در این اجرا)`
@@ -536,10 +551,13 @@ app.post('/api/bridge/cloud-scan', async (req: Request, res: Response) => {
         });
       } catch (error: any) {
         emitBridgeLog(`پیگیری اسکن ابری ناموفق بود: ${error?.message ?? error}`, 'scan');
+      } finally {
+        cloudScanBusy = false;
       }
     })();
     return;
   } catch (error: any) {
+    cloudScanBusy = false;
     return res.status(502).json({ success: false, error: error?.message ?? 'درخواست اسکن ابری ناموفق بود' });
   }
 });
@@ -789,6 +807,9 @@ app.post('/api/generate-solution', async (req: Request, res: Response) => {
   }
 });
 
+// Unknown API paths must not fall through to the SPA HTML.
+app.use('/api', (_req, res) => { res.status(404).json({ error: 'API_NOT_FOUND' }); });
+
 // Start Express server and connect Vite in development
 async function startServer() {
   const isProduction = process.env.NODE_ENV === 'production';
@@ -854,8 +875,8 @@ async function startServer() {
     console.log(`[scanner] اسکن خودکار هر ${SCAN_CONFIG.intervalMinutes} دقیقه فعال است.`);
   }
 
-  httpServer.listen(PORT, '0.0.0.0', () => {
-    console.log(`Konklancer server & Socket.io bridge running at http://localhost:${PORT}`);
+  httpServer.listen(PORT, HOST, () => {
+    console.log(`Konklancer server & Socket.io bridge running at http://${HOST}:${PORT}`);
   });
 }
 

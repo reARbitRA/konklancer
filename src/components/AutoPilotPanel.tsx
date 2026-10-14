@@ -1,3 +1,4 @@
+import { apiFetch as fetch } from '../utils/api';
 import React, { useState, useMemo } from 'react';
 import { 
   ResponsiveContainer, 

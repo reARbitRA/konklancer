@@ -14,5 +14,5 @@ verification: "npx tsc --noEmit && npx vite build && npm run test:scanner"
 - R6 autoStart on in_progress disabled (App.tsx)
 - R7 NOT done (open question Q1)
 ## Remaining
-- R5 API auth (KONKLANCER_API_TOKEN) — needs frontend header change
+- R5 DONE (2026-10-14): API Bearer auth, Socket.io auth, frontend sessionStorage login, loopback-only unauthenticated dev, fail-closed production. Verification: npm test (29), npm run lint, npm run build, npm run test:scanner (54), live HTTP + Socket.io smoke.
 - Q2 model names; Q1 engine deletion; Q3 confirm R6 wording

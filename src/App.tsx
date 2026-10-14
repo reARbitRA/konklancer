@@ -1,3 +1,6 @@
+import { isFreshCloudScan } from '../shared/cloudScan';
+import { getApiToken } from './utils/api';
+import { apiFetch as fetch } from './utils/api';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { 
@@ -285,8 +288,9 @@ export default function App() {
 
   // درخواست اسکن ابری: رانر گیت‌هاب اسکنر واقعی را اجرا می‌کند و بعد فید همگام می‌شود
   const handleCloudScan = useCallback(async () => {
+    if (cloudBusy) return;
     setCloudBusy(true);
-    addLog('درخواست اسکن ابری ثبت شد؛ رانر گیت‌هاب در حال اجرای اسکنر واقعی است...', 'scan');
+    addLog('در حال ثبت درخواست اسکن ابری...', 'scan');
     try {
       const res = await fetch('/api/bridge/cloud-scan', {
         method: 'POST',
@@ -295,12 +299,14 @@ export default function App() {
       });
       const data = await res.json();
       addLog(String(data?.message ?? data?.error ?? 'درخواست اسکن ابری ثبت شد.'), 'scan');
-      // پیگیری وضعیت هر ۱۵ ثانیه تا پایان اجرا (سقف ~۵ دقیقه)
-      const deadline = Date.now() + 5 * 60_000;
+      if (!res.ok || !data?.queued || !data?.since) throw new Error(data?.error ?? data?.message ?? 'درخواست اسکن ثبت نشد.');
+      // Follow only this request, not the previous run's finished status.
+      const deadline = Date.now() + 25 * 60_000;
       while (Date.now() < deadline) {
         await new Promise((resolve) => setTimeout(resolve, 15_000));
         const status = await refreshCloudStatus();
-        if (status?.status?.phase === 'finished') {
+        if (isFreshCloudScan(status?.status, data.since)) {
+          if (status.status.job_status !== 'success') throw new Error('اسکن ابری ناموفق بود؛ گزارش اجرا را بررسی کنید.');
           addLog(`اسکن ابری تمام شد (${status.status.projects_this_run ?? 0} پروژه در این اجرا).`, 'scan');
           await handleSyncCloudFeed();
           return;
@@ -312,12 +318,13 @@ export default function App() {
     } finally {
       setCloudBusy(false);
     }
-  }, [addLog, refreshCloudStatus, handleSyncCloudFeed]);
+  }, [cloudBusy, addLog, refreshCloudStatus, handleSyncCloudFeed]);
 
 
   // Robust Socket.io Client Setup with Exponential Backoff Reconnection Policy
   useEffect(() => {
     const socket: Socket = io({
+      auth: { token: getApiToken() },
       transports: ['websocket', 'polling'],
       reconnection: true,
       reconnectionAttempts: 30, // 30 automatic retries
@@ -467,6 +474,10 @@ export default function App() {
 
   // Real-time scan trigger sending event to Socket.io backend bridge
   const handleQuickScan = () => {
+    if (cloudInfo.enabled) {
+      void handleCloudScan();
+      return;
+    }
     setIsScanning(true);
     addLog('ارسال سیگنال اسکن زنده به بریج وب‌سوکت Socket.io...');
 
@@ -658,7 +669,7 @@ export default function App() {
         setActiveTab={setActiveTab}
         onOpenSettings={() => setIsSettingsOpen(true)}
         onQuickScan={handleQuickScan}
-        isScanning={isScanning}
+        isScanning={isScanning || cloudBusy}
         totalEarningsToday={totalEarningsToday}
         activeJobsCount={activeJobsCount}
         socketConnected={socketConnected}
@@ -705,7 +716,7 @@ export default function App() {
             scannedAt={feed.scannedAt}
             scannedProjects={feed.scannedProjects}
             jobCount={jobs.length}
-            isScanning={isScanning}
+            isScanning={isScanning || cloudBusy}
             onScan={handleQuickScan}
             cloudEnabled={cloudInfo.enabled}
             cloudBusy={cloudBusy}
@@ -771,7 +782,7 @@ export default function App() {
             jobs={jobs}
             onUpdateSettings={(newSettings) => setSettings({ ...settings, ...newSettings })}
             onTriggerManualScan={handleQuickScan}
-            isScanning={isScanning}
+            isScanning={isScanning || cloudBusy}
           />
         )}
       </main>

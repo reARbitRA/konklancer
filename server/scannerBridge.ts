@@ -1,3 +1,4 @@
+import { isFreshCloudScan } from '../shared/cloudScan';
 // SPEC-004 — پل بین اسکنر فقط‌خواندنی (scanner/) و رابط کاربری.
 //
 // این ماژول:
@@ -878,11 +879,11 @@ export async function waitForCloudScan(
   while (Date.now() < deadline) {
     try {
       latest = await fetchCloudStatus(config, options);
-      if (latest && latest.phase === 'finished' && String(latest.finished_at ?? '') >= sinceIso) return latest;
+      if (isFreshCloudScan(latest, sinceIso)) return latest;
     } catch {
       // خطای موقت شبکه: دوباره تلاش می‌کنیم.
     }
     await new Promise((resolve) => setTimeout(resolve, 15_000));
   }
-  return latest;
+  throw new Error('مهلت پیگیری اسکن تمام شد؛ نتیجهٔ تازه دریافت نشد. بعداً همگام‌سازی کنید.');
 }

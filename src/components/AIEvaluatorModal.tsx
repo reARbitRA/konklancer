@@ -1,3 +1,4 @@
+import { apiFetch as fetch } from '../utils/api';
 import React, { useState } from 'react';
 import { 
   Sparkles, 

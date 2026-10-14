@@ -318,3 +318,20 @@ test('scanner-provided category wins over local detection', () => {
   assert.equal(job.categoryKey, 'video');
   assert.equal(job.category, categoryLabel('video'));
 });
+
+// A completed historical run must not make the new request look successful.
+import { isFreshCloudScan } from '../shared/cloudScan';
+import { waitForCloudScan, type CloudFeedConfig } from './scannerBridge';
+
+test('cloud completion must be finished and newer than this request', () => {
+  const since = '2026-10-14T10:00:00.500Z';
+  assert.equal(isFreshCloudScan({ phase: 'finished', finished_at: '2026-10-14T09:59:59Z' }, since), false);
+  assert.equal(isFreshCloudScan({ phase: 'started', finished_at: '2026-10-14T10:01:00Z' }, since), false);
+  assert.equal(isFreshCloudScan({ phase: 'finished', finished_at: 'invalid' }, since), false);
+  assert.equal(isFreshCloudScan(null, since), false);
+  assert.equal(isFreshCloudScan({ phase: 'finished', finished_at: '2026-10-14T10:01:00Z' }, since), true);
+});
+
+test('cloud timeout rejects rather than returning stale status as success', async () => {
+  await assert.rejects(waitForCloudScan({ pollTimeoutMs: 0 } as CloudFeedConfig, new Date().toISOString()), /نتیجهٔ تازه/);
+});
