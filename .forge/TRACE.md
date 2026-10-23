@@ -28,3 +28,26 @@
 - تصمیم‌ها: (۱) دسته فقط متادیتا/فیلتر صریح است، نه گیت؛ (۲) کشف ساختار از خود DOM، نه هاردکد؛ (۳) مسیر HTML مرورگر به‌عنوان تضمین‌گاه همیشه در دسترس؛ (۴) ادعای تأییدنشده بودن نامزدها در کد و مستندات.
 - شواهد: pytest 33/33، npm test 24/24، tsc/build سالم، E2E آفلاین با فیکسچرهای کارت/جدول/SPA.
 - محدودیت صریح: صفر تماس موفق با سایت واقعی در این محیط؛ تأیید زنده = وظیفه‌ی کاربر روی ماشین خودش.
+
+
+## 2026-10-20 · T-008 (session-006) · SPEC-008
+- SPEC-008 §2 → shared/aiProviders.ts (presets، normalizeBaseUrl، pickModels، validateConnectionDraft)
+- SPEC-008 R1–R5 → server/aiConfig.ts + PUT /api/ai/config + .env.example
+- SPEC-008 R6–R8 → server.ts (sendLLMError، SSE helpers) + src/utils/aiClient.ts
+- SPEC-008 R9–R12 → server/aiEngine.ts (chat/chatStream، variants، cacheValidate، mock guard)
+- SPEC-008 R13–R16 → server/aiTasks.ts
+- SPEC-008 R17–R20 → server/codeRunner.ts + POST /api/run-tests
+- SPEC-008 R21–R26 → AISettingsPanel، SettingsModal، Header، App (بنر)، AIEvaluatorModal،
+  ProposalStudioModal، CodeWorkspace، AutoPilotPanel
+- تست‌ها → server/ai.test.ts (۳۲ تست)؛ سایر: server/llm.test.ts و server/scannerBridge.test.ts
+
+## 2026-10-23 · T-009 (session-007) · SPEC-009
+- SPEC-009 R1–R6 → src/index.css (توکن‌ها، `@layer components`، `.code-*`، `.resize-handle`، `.sheet`)
+- SPEC-009 R7–R10 → src/App.tsx (شل `100dvh`)، src/components/Header.tsx، src/components/StatusBar.tsx
+- SPEC-009 R11–R16 → src/components/JobHunter.tsx (parseQuery، فیلتر ماندگار، master–detail، کیبورد)
+- SPEC-009 R17–R18 → src/components/CommandPalette.tsx + App.tsx (`focusJobId`، Ctrl/⌘+K)
+- SPEC-009 R19–R23 → src/components/workspace/{fileTree,FileTree,CodeEditor,highlight}.ts(x)
+- SPEC-009 R24–R25 → src/components/workspace/{WorkspaceInspector,WorkspaceTerminal}.tsx
+- SPEC-009 R26–R27 → src/components/CodeWorkspace.tsx (استریم، پنل‌های قابل بستن، حالت موبایل)
+- SPEC-009 R28–R30 → src/components/workspace/MarkdownView.tsx، index.html (برند Konklancer)
+- تست‌ها → SSR smoke (۱۵ کامپوننت) + E2E mock provider + 57/57 تست سرور؛ هیچ تست جدید سروری لازم نبود

@@ -66,23 +66,25 @@ export const FeedStatusBar: React.FC<FeedStatusBarProps> = ({
           : 'در حال خواندن فید اسکنر...';
 
   return (
-    <div className={`mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border px-3 py-2 text-xs ${palette}`}>
-      <div className="flex items-center gap-2">
-        <Icon className="h-4 w-4 shrink-0" />
-        <span className="font-medium">{label}</span>
+    <div className={`flex shrink-0 flex-wrap items-center justify-between gap-x-3 gap-y-1.5 border-b px-3 py-1.5 text-[11px] ${palette}`}>
+      <div className="flex min-w-0 items-center gap-2">
+        <Icon className="h-3.5 w-3.5 shrink-0" />
+        <span className="truncate font-medium">{label}</span>
         {source === 'scanner' && (
-          <span className="font-mono text-[11px] opacity-80">آخرین اسکن: {relativeTimeFa(scannedAt)}</span>
+          <span className="hidden shrink-0 font-mono text-[10px] opacity-80 sm:inline">
+            آخرین اسکن: {relativeTimeFa(scannedAt)}
+          </span>
         )}
       </div>
 
-      <div className="flex items-center gap-2">
+      <div className="flex shrink-0 items-center gap-1.5">
         {cloudEnabled && (
           <>
             <button
               onClick={onSyncFeed}
               disabled={cloudBusy}
               title="آخرین فید اسکن‌شده روی گیت‌هاب را بیاور (بدون اجرای اسکن تازه)"
-              className="flex items-center gap-1.5 rounded-md border border-slate-700/70 bg-slate-900/70 px-2.5 py-1 font-medium text-slate-200 transition-colors hover:bg-slate-800 disabled:opacity-50"
+              className="flex h-6 items-center gap-1 rounded-md border border-slate-700/70 bg-slate-900/70 px-2 text-[10.5px] font-medium text-slate-200 transition-colors hover:bg-slate-800 disabled:opacity-50"
             >
               <Download className="h-3 w-3" />
               <span>همگام‌سازی</span>
@@ -91,7 +93,7 @@ export const FeedStatusBar: React.FC<FeedStatusBarProps> = ({
               onClick={onCloudScan}
               disabled={cloudBusy}
               title="اجرای اسکنر واقعی روی رانرهای گیت‌هاب (سایت‌های فریلنسری از این سرور قابل دسترسی نیستند)"
-              className="flex items-center gap-1.5 rounded-md border border-emerald-800/70 bg-emerald-950/50 px-2.5 py-1 font-medium text-emerald-200 transition-colors hover:bg-emerald-900/50 disabled:opacity-50"
+              className="flex h-6 items-center gap-1 rounded-md border border-emerald-800/70 bg-emerald-950/50 px-2 text-[10.5px] font-medium text-emerald-200 transition-colors hover:bg-emerald-900/50 disabled:opacity-50"
             >
               <Cloud className={`h-3 w-3 ${cloudBusy ? 'animate-pulse' : ''}`} />
               <span>{cloudBusy ? 'اسکن ابری در جریان...' : 'اسکن ابری'}</span>
@@ -101,7 +103,7 @@ export const FeedStatusBar: React.FC<FeedStatusBarProps> = ({
         <button
           onClick={onScan}
           disabled={isScanning}
-          className="flex items-center gap-1.5 rounded-md border border-slate-700/70 bg-slate-900/70 px-2.5 py-1 font-medium text-slate-200 transition-colors hover:bg-slate-800 disabled:opacity-50"
+          className="flex h-6 items-center gap-1 rounded-md border border-slate-700/70 bg-slate-900/70 px-2 text-[10.5px] font-medium text-slate-200 transition-colors hover:bg-slate-800 disabled:opacity-50"
         >
           <RefreshCw className={`h-3 w-3 ${isScanning ? 'animate-spin' : ''}`} />
           <span>{isScanning ? 'در حال اسکن...' : 'اسکن زنده'}</span>

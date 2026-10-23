@@ -1,13 +1,20 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { io, Socket } from 'socket.io-client';
-import { 
-  AlertTriangle, 
-  RefreshCw, 
-  X, 
-  WifiOff, 
-  CheckCircle2 
+import {
+  AlertTriangle,
+  Radar,
+  RefreshCw,
+  Settings,
+  Sparkles,
+  Terminal,
+  WifiOff,
+  Workflow,
+  X,
+  Zap,
 } from 'lucide-react';
-import { Header } from './components/Header';
+import { Header, type AppTab } from './components/Header';
+import { MobileNav, StatusBar } from './components/StatusBar';
+import { CommandPalette, type PaletteAction } from './components/CommandPalette';
 import { JobHunter } from './components/JobHunter';
 import { CodeWorkspace } from './components/CodeWorkspace';
 import { PipelineBoard } from './components/PipelineBoard';
@@ -16,12 +23,13 @@ import { AIEvaluatorModal } from './components/AIEvaluatorModal';
 import { ProposalStudioModal } from './components/ProposalStudioModal';
 import { GitHubDispatcher } from './components/GitHubDispatcher';
 import { GitHubWorkflowManager } from './components/GitHubWorkflowManager';
-import { SettingsModal } from './components/SettingsModal';
+import { SettingsModal, type SettingsTab } from './components/SettingsModal';
 import { INITIAL_JOBS } from './data/mockJobs';
 import { FreelanceJob, AIAnalysis, ActivityLogItem, UserSettings, PriorityLevel } from './types';
 import { categorizeJobWithGemini } from './utils/geminiCategorizer';
 import { categoryLabel, detectCategory } from '../shared/taxonomy';
 import { FeedStatusBar, FeedSource } from './components/FeedStatusBar';
+import { getAIStatus, type AIStatusPayload } from './utils/aiClient';
 
 /**
  * Runtime Type Guard to strictly validate incoming Socket.io data
@@ -123,14 +131,7 @@ export default function App() {
     return { ...defaults, ...rest, githubToken: sessionToken || legacyToken || '' };
   });
 
-  const [logs, setLogs] = useState<ActivityLogItem[]>([
-    {
-      id: 'log-1',
-      timestamp: '۱۰:۴۲',
-      type: 'scan',
-      message: 'موتور رصد به پلتفرم‌های پونیشا، کارلانسر و پارسکدرز متصل شد.',
-    },
-  ]);
+  const [logs, setLogs] = useState<ActivityLogItem[]>([]);
 
   // Socket.io Real-Time Client State
   const socketRef = useRef<Socket | null>(null);
@@ -148,15 +149,31 @@ export default function App() {
   }>({ job: null, files: {} });
   const [jobToInit, setJobToInit] = useState<FreelanceJob | null>(null);
 
+  const [isCommandOpen, setIsCommandOpen] = useState(false);
+  const [focusJobId, setFocusJobId] = useState<string | null>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [settingsTab, setSettingsTab] = useState<SettingsTab>('general');
+  const [aiStatus, setAiStatus] = useState<AIStatusPayload | null>(null);
+  const [aiStatusLoading, setAiStatusLoading] = useState(true);
+  // SPEC-008: تحلیل خودکار پروژه‌های تازه (اختیاری، پیش‌فرض خاموش). هیچ پیشنهادی خودکار ارسال نمی‌شود.
+  const [autoAnalyze, setAutoAnalyze] = useState<boolean>(() => localStorage.getItem('konklancer_auto_analyze') === '1');
   const [isScanning, setIsScanning] = useState(false);
   // فید ابری: اسکنر واقعی روی رانرهای گیت‌هاب اجرا می‌شود (سایت‌ها از این سرور قابل دسترسی نیستند)
   const [cloudInfo, setCloudInfo] = useState<{ enabled: boolean; repo?: string; status?: any }>({ enabled: false });
   const [cloudBusy, setCloudBusy] = useState(false);
 
-  // Sync state to localStorage
+  // Sync state to localStorage — سهمیه‌ی مرورگر ممکن است با فایل‌های تولیدشده پر شود؛
+  // در آن صورت برنامه نباید کرش کند و باید صادقانه هشدار بدهد.
+  const [storageWarning, setStorageWarning] = useState<string | null>(null);
   useEffect(() => {
-    localStorage.setItem('freelanceflow_jobs', JSON.stringify(jobs));
+    try {
+      localStorage.setItem('freelanceflow_jobs', JSON.stringify(jobs));
+      setStorageWarning(null);
+    } catch {
+      setStorageWarning(
+        'حافظه‌ی مرورگر پر شده است؛ تغییرات آخر فقط تا بستن این تب باقی می‌مانند. فایل‌های پروژه را از استودیو کد در GitHub ثبت کنید.',
+      );
+    }
   }, [jobs]);
 
   // SPEC-004: خواندن فید از سرور (خروجی اسکنر) به‌جای داده‌ی ساختگی.
@@ -170,6 +187,40 @@ export default function App() {
       setCloudInfo({ enabled: false });
       return null;
     }
+  }, []);
+
+  // وضعیت AI (SPEC-008): برای بنر «تنظیم نشده» و نشانگر مدل در هدر
+  const refreshAIStatus = useCallback(async () => {
+    try {
+      const data = await getAIStatus();
+      setAiStatus(data);
+    } catch {
+      setAiStatus(null);
+    } finally {
+      setAiStatusLoading(false);
+    }
+  }, []);
+
+  const openAISettings = useCallback(() => {
+    setSettingsTab('ai');
+    setIsSettingsOpen(true);
+  }, []);
+
+  const openSettings = useCallback(() => {
+    setSettingsTab('general');
+    setIsSettingsOpen(true);
+  }, []);
+
+  // Ctrl/Cmd+K — جست‌وجوی سراسری (همان الگوی VS Code)
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
+        event.preventDefault();
+        setIsCommandOpen((value) => !value);
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
   }, []);
 
   // همگام‌سازی فید محلی با آخرین فید ابری
@@ -200,12 +251,18 @@ export default function App() {
   useEffect(() => {
     refreshCloudStatus();
     refreshFeed();
-  }, [refreshFeed]);
+    void refreshAIStatus();
+  }, [refreshFeed, refreshAIStatus]);
 
   const jobsRef = useRef(jobs);
   useEffect(() => {
     jobsRef.current = jobs;
   }, [jobs]);
+
+  // فقط پروژه‌هایی که بعد از باز شدن صفحه اضافه می‌شوند کاندید تحلیل خودکار هستند
+  // (بک‌لاگ قبلی به‌صورت ناخواسته هزینه‌ی توکن ایجاد نمی‌کند).
+  const knownJobIdsRef = useRef<Set<string>>(new Set(jobs.map((job) => job.id)));
+  const autoAnalyzedRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -266,6 +323,71 @@ export default function App() {
     };
     setLogs((prev) => [newLog, ...prev.slice(0, 49)]);
   };
+
+  useEffect(() => {
+    localStorage.setItem('konklancer_auto_analyze', autoAnalyze ? '1' : '0');
+  }, [autoAnalyze]);
+
+  const analyzeJobInBackground = async (job: FreelanceJob) => {
+    addLog(`تحلیل خودکار شروع شد: «${job.title.slice(0, 40)}»`, 'bid');
+    try {
+      const response = await fetch('/api/analyze-job', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: job.title,
+          description: job.description,
+          budget: job.budget,
+          budgetFormatted: job.budgetFormatted,
+          platform: job.platform,
+          proposalsCount: job.proposalsCount,
+          deadline: job.deadline,
+          postedTime: job.postedTime,
+          category: job.category,
+          url: job.url,
+        }),
+      });
+      const data = await response.json().catch(() => null);
+      if (!response.ok) {
+        addLog(
+          `تحلیل خودکار «${job.title.slice(0, 30)}» ناموفق بود: ${data?.error ?? `HTTP ${response.status}`}`,
+          'bid',
+        );
+        return;
+      }
+      const value: AIAnalysis = {
+        ...(data.analysis ?? data),
+        warnings: data.warnings ?? [],
+        partial: Boolean(data.partial),
+        meta: data.meta ?? null,
+      };
+      setJobs((prev) => prev.map((item) => (item.id === job.id ? { ...item, aiAnalysis: value } : item)));
+      addLog(
+        `تحلیل خودکار «${job.title.slice(0, 30)}»: اتوماسیون ${value.automatabilityScore}٪${
+          typeof value.matchScore === 'number' ? ` · تناسب ${value.matchScore}٪` : ''
+        }`,
+        'bid',
+      );
+    } catch (error: any) {
+      addLog(`تحلیل خودکار ناموفق بود: ${error?.message ?? error}`, 'bid');
+    }
+  };
+
+  useEffect(() => {
+    const known = knownJobIdsRef.current;
+    const fresh = jobs.filter((job) => !known.has(job.id));
+    jobs.forEach((job) => known.add(job.id));
+    if (!autoAnalyze || !aiStatus?.configured || fresh.length === 0) return;
+    const candidates = fresh
+      .filter((job) => !job.aiAnalysis && !autoAnalyzedRef.current.has(job.id))
+      .filter((job) => typeof job.score !== 'number' || job.score >= settings.autoBidThreshold)
+      .slice(0, 2);
+    for (const job of candidates) {
+      autoAnalyzedRef.current.add(job.id);
+      void analyzeJobInBackground(job);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [jobs, autoAnalyze, aiStatus?.configured, settings.autoBidThreshold]);
 
   // --- فید ابری: همگام‌سازی و درخواست اسکن روی رانر گیت‌هاب ---
   const handleSyncCloudFeed = useCallback(async () => {
@@ -534,26 +656,27 @@ export default function App() {
               ...j,
               proposal,
               proposedPrice: price,
-              status: j.status === 'new' ? 'bidded' : j.status,
+              // وضعیت «ارسال‌شده» فقط با اقدام صریح کاربر در پایپ‌لاین ثبت می‌شود؛
+              // تولید متن به معنی ارسال آن به کارفرما نیست.
             }
           : j
       )
     );
-    addLog(`پیشنهاد قیمت ${price.toLocaleString('fa-IR')} تومان در پایپ‌لاین ثبت گردید.`, 'bid');
+    addLog(
+      `پیشنهاد ${price.toLocaleString('fa-IR')} تومانی برای پروژه ذخیره شد (هنوز ارسال نشده).`,
+      'bid',
+    );
   };
 
   const handleUpdateJobFiles = (jobId: string, files: Record<string, string>) => {
+    const current = jobsRef.current.find((job) => job.id === jobId);
     setJobs((prev) =>
-      prev.map((j) => {
-        if (j.id === jobId) {
-          const updatedJob = { ...j, generatedFiles: files, status: 'in_progress' as const };
-          setJobToInit(updatedJob);
-          return updatedJob;
-        }
-        return j;
-      })
+      prev.map((j) =>
+        j.id === jobId ? { ...j, generatedFiles: files, status: 'in_progress' as const } : j,
+      ),
     );
-    addLog(`سورس کامل پروژه "${jobId}" با ایجنت کدنویسی تولید و اعتبارسنجی شد.`, 'code');
+    if (current) setJobToInit({ ...current, generatedFiles: files, status: 'in_progress' });
+    addLog(`سورس پروژه «${jobId}» با ایجنت تولید شد (تست‌ها هنوز اجرا نشده‌اند).`, 'code');
   };
 
   const handleCompleteJob = (jobId: string, repoUrl: string) => {
@@ -650,131 +773,211 @@ export default function App() {
   );
   const activeJobsCount = jobs.filter((j) => j.status !== 'completed').length;
 
+  const goToTab = useCallback((tab: AppTab) => setActiveTab(tab), []);
+
+  const paletteActions: PaletteAction[] = [
+    { id: 'tab-hunter', label: 'رفتن به پروژه‌ها', hint: 'فهرست و جست‌وجوی آگهی‌ها', icon: Radar, run: () => goToTab('hunter') },
+    { id: 'tab-coder', label: 'رفتن به استودیو کد', hint: 'ادیتور، فایل‌ها و ایجنت', icon: Terminal, run: () => goToTab('coder') },
+    { id: 'tab-pipeline', label: 'رفتن به پایپ‌لاین', hint: 'برد وضعیت پروژه‌ها', icon: Workflow, run: () => goToTab('pipeline') },
+    { id: 'tab-autopilot', label: 'رفتن به مرکز کنترل', hint: 'اسکن، تحلیل خودکار، لاگ‌ها', icon: Sparkles, run: () => goToTab('autopilot') },
+    {
+      id: 'scan',
+      label: 'اسکن زنده‌ی فید',
+      hint: 'اجرای اسکنر واقعی روی منابع',
+      icon: Zap,
+      run: () => {
+        setActiveTab('hunter');
+        handleQuickScan();
+      },
+    },
+    { id: 'ai-settings', label: 'تنظیم هوش مصنوعی', hint: 'provider، کلید و مدل', icon: Sparkles, run: openAISettings },
+    { id: 'settings', label: 'تنظیمات برنامه', hint: 'عمومی، گیت‌هاب، اجرای کد', icon: Settings, run: openSettings },
+  ];
+
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans">
+    <div className="flex h-[100dvh] flex-col overflow-hidden bg-slate-950 text-slate-100">
       {/* Top Bar Header */}
       <Header
         activeTab={activeTab}
         setActiveTab={setActiveTab}
-        onOpenSettings={() => setIsSettingsOpen(true)}
+        onOpenSettings={openSettings}
         onQuickScan={handleQuickScan}
+        aiStatus={aiStatus}
         isScanning={isScanning}
         totalEarningsToday={totalEarningsToday}
         activeJobsCount={activeJobsCount}
         socketConnected={socketConnected}
+        onOpenCommandPalette={() => setIsCommandOpen(true)}
       />
 
       {/* Persistent Socket.io Connection Error Notification Banner */}
       {socketError && (
-        <div className="bg-red-950/80 border-b border-red-800/80 text-red-200 px-4 py-2.5 text-xs transition-all animate-in slide-in-from-top duration-200">
-          <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-2">
-              <WifiOff className="h-4 w-4 text-red-400 shrink-0" />
-              <span className="font-medium">
-                {socketError}
-              </span>
+        <div className="shrink-0 border-b border-red-800/80 bg-red-950/80 px-3 py-1.5 text-[11px] text-red-200">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex min-w-0 items-center gap-2">
+              <WifiOff className="h-3.5 w-3.5 shrink-0 text-red-400" />
+              <span className="truncate font-medium">{socketError}</span>
             </div>
-
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5">
               <button
                 onClick={handleManualReconnect}
                 disabled={isReconnecting}
-                className="flex items-center gap-1.5 px-3 py-1 bg-red-900/60 hover:bg-red-850 text-red-100 border border-red-700/60 rounded text-[11px] font-medium transition-colors disabled:opacity-50"
+                className="btn h-6 border-red-700/60 bg-red-900/60 px-2 text-[10px] text-red-100 hover:bg-red-900/80"
               >
                 <RefreshCw className={`h-3 w-3 ${isReconnecting ? 'animate-spin' : ''}`} />
-                <span>{isReconnecting ? 'در حال اتصال مجدد...' : 'تلاش مجدد برای اتصال (Reconnect)'}</span>
+                {isReconnecting ? 'در حال اتصال مجدد…' : 'اتصال مجدد'}
               </button>
-
-              <button
-                onClick={() => setSocketError(null)}
-                className="text-red-400 hover:text-red-200 p-1"
-                title="بستن پیام"
-              >
-                <X className="h-3.5 w-3.5" />
+              <button onClick={() => setSocketError(null)} className="icon-btn h-6 w-6 text-red-300" aria-label="بستن پیام">
+                <X className="h-3 w-3" />
               </button>
             </div>
           </div>
         </div>
       )}
 
+      {storageWarning && (
+        <div className="flex shrink-0 items-center gap-1.5 border-b border-amber-800/50 bg-amber-950/30 px-3 py-1 text-[10px] text-amber-200">
+          <AlertTriangle className="h-3 w-3 shrink-0" />
+          <span className="truncate">{storageWarning}</span>
+          <button onClick={() => setStorageWarning(null)} className="ms-auto shrink-0 text-amber-400 hover:text-amber-200">
+            <X className="h-3 w-3" />
+          </button>
+        </div>
+      )}
+
+      {/* AI setup banner (SPEC-008) — فقط وقتی AI تنظیم نشده است */}
+      {!aiStatusLoading && aiStatus && !aiStatus.configured && (
+        <div className="shrink-0 border-b border-amber-800/50 bg-amber-950/40 px-3 py-1.5 text-[11px] text-amber-100">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex min-w-0 items-center gap-2">
+              <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-400" />
+              <span className="truncate">
+                <span className="font-semibold">هوش مصنوعی تنظیم نشده.</span> برای تحلیل، پروپوزال، دسته‌بندی و تولید کد،
+                یک provider و کلید اضافه کنید.
+              </span>
+            </div>
+            <button onClick={openAISettings} className="btn h-6 border-amber-500/50 bg-amber-500/15 px-2 text-[10px] font-bold text-amber-100 hover:bg-amber-500/25">
+              <Sparkles className="h-3 w-3" /> تنظیم هوش مصنوعی
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Main Workspace Canvas */}
-      <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8">
+      <main className="flex min-h-0 flex-1 flex-col">
         {activeTab === 'hunter' && (
-          <FeedStatusBar
-            source={feed.source}
-            scannedAt={feed.scannedAt}
-            scannedProjects={feed.scannedProjects}
-            jobCount={jobs.length}
-            isScanning={isScanning}
-            onScan={handleQuickScan}
-            cloudEnabled={cloudInfo.enabled}
-            cloudBusy={cloudBusy}
-            onCloudScan={handleCloudScan}
-            onSyncFeed={handleSyncCloudFeed}
-          />
-        )}
-        {activeTab === 'hunter' && (
-          <JobHunter
-            jobs={jobs}
-            onSelectJobForAnalysis={(job) => setSelectedJobForAnalysis(job)}
-            onSelectJobForProposal={(job) => setSelectedJobForProposal(job)}
-            onSelectJobForCoding={(job) => {
-              setSelectedJobForCoding(job);
-              setActiveTab('coder');
-            }}
-            onAddNewManualJob={handleAddNewManualJob}
-          />
+          <div className="flex min-h-0 flex-1 flex-col">
+            <FeedStatusBar
+              source={feed.source}
+              scannedAt={feed.scannedAt}
+              scannedProjects={feed.scannedProjects}
+              jobCount={jobs.length}
+              isScanning={isScanning}
+              onScan={handleQuickScan}
+              cloudEnabled={cloudInfo.enabled}
+              cloudBusy={cloudBusy}
+              onCloudScan={handleCloudScan}
+              onSyncFeed={handleSyncCloudFeed}
+            />
+            <div className="min-h-0 flex-1">
+              <JobHunter
+                jobs={jobs}
+                focusJobId={focusJobId}
+                onFocusHandled={() => setFocusJobId(null)}
+                onSelectJobForAnalysis={(job) => setSelectedJobForAnalysis(job)}
+                onSelectJobForProposal={(job) => setSelectedJobForProposal(job)}
+                onSelectJobForCoding={(job) => {
+                  setSelectedJobForCoding(job);
+                  setActiveTab('coder');
+                }}
+                onAddNewManualJob={handleAddNewManualJob}
+              />
+            </div>
+          </div>
         )}
 
         {activeTab === 'coder' && (
-          <CodeWorkspace
-            job={selectedJobForCoding}
-            githubToken={settings.githubToken}
-            onOpenGitHubPush={(job, files) => {
-              setGitHubPushState({ job, files });
-            }}
-            onUpdateJobFiles={handleUpdateJobFiles}
-            onUpdateJobRepoUrl={handleUpdateJobRepoUrl}
-          />
+          <div className="flex min-h-0 flex-1 flex-col">
+            <CodeWorkspace
+              job={selectedJobForCoding}
+              githubToken={settings.githubToken}
+              onOpenGitHubPush={(job, files) => {
+                setGitHubPushState({ job, files });
+              }}
+              onUpdateJobFiles={handleUpdateJobFiles}
+              onUpdateJobRepoUrl={handleUpdateJobRepoUrl}
+              onOpenAISettings={openAISettings}
+              autoGenerate={settings.cyborgMode && Boolean(aiStatus?.configured)}
+              onBrowseJobs={() => setActiveTab('hunter')}
+            />
+          </div>
         )}
 
-        {activeTab === 'pipeline' && (
-          <PipelineBoard
-            jobs={jobs}
-            onSelectJobForAnalysis={(job) => setSelectedJobForAnalysis(job)}
-            onSelectJobForProposal={(job) => setSelectedJobForProposal(job)}
-            onSelectJobForCoding={(job) => {
-              setSelectedJobForCoding(job);
-              setActiveTab('coder');
-            }}
-            onMoveJobStatus={handleMoveJobStatus}
-            onUpdatePriority={handleUpdatePriority}
-            dailyEarningsGoal={settings.dailyEarningsGoal}
-          />
-        )}
-        {jobToInit && (
-          <GitHubWorkflowManager
-            job={jobToInit}
-            githubToken={settings.githubToken}
-            onRepoCreated={(repoUrl) => {
-              setJobs(prev => prev.map(j => j.id === jobToInit.id ? { ...j, repoUrl } : j));
-              setJobToInit(null);
-            }}
-            autoStart={false}
-          />
-        )}
-
-        {activeTab === 'autopilot' && (
-          <AutoPilotPanel
-            logs={logs}
-            settings={settings}
-            jobs={jobs}
-            onUpdateSettings={(newSettings) => setSettings({ ...settings, ...newSettings })}
-            onTriggerManualScan={handleQuickScan}
-            isScanning={isScanning}
-          />
+        {(activeTab === 'pipeline' || activeTab === 'autopilot') && (
+          <div className="min-h-0 flex-1 overflow-y-auto">
+            <div className="mx-auto w-full max-w-[1600px] space-y-3 p-3 sm:p-4">
+              {activeTab === 'pipeline' && (
+                <PipelineBoard
+                  jobs={jobs}
+                  onSelectJobForAnalysis={(job) => setSelectedJobForAnalysis(job)}
+                  onSelectJobForProposal={(job) => setSelectedJobForProposal(job)}
+                  onSelectJobForCoding={(job) => {
+                    setSelectedJobForCoding(job);
+                    setActiveTab('coder');
+                  }}
+                  onMoveJobStatus={handleMoveJobStatus}
+                  onUpdatePriority={handleUpdatePriority}
+                  dailyEarningsGoal={settings.dailyEarningsGoal}
+                />
+              )}
+              {activeTab === 'autopilot' && (
+                <AutoPilotPanel
+                  logs={logs}
+                  settings={settings}
+                  jobs={jobs}
+                  onUpdateSettings={(newSettings) => setSettings({ ...settings, ...newSettings })}
+                  onTriggerManualScan={handleQuickScan}
+                  isScanning={isScanning}
+                  autoAnalyze={autoAnalyze}
+                  onToggleAutoAnalyze={() => setAutoAnalyze((value) => !value)}
+                  aiConfigured={Boolean(aiStatus?.configured)}
+                />
+              )}
+              {jobToInit && (
+                <GitHubWorkflowManager
+                  job={jobToInit}
+                  githubToken={settings.githubToken}
+                  onRepoCreated={(repoUrl) => {
+                    setJobs((prev) => prev.map((j) => (j.id === jobToInit.id ? { ...j, repoUrl } : j)));
+                    setJobToInit(null);
+                  }}
+                  autoStart={false}
+                />
+              )}
+            </div>
+          </div>
         )}
       </main>
+
+      <StatusBar
+        socketConnected={socketConnected}
+        aiStatus={aiStatus}
+        feedSource={feed.source}
+        jobCount={jobs.length}
+        activeTab={activeTab}
+      />
+      <MobileNav activeTab={activeTab} setActiveTab={setActiveTab} activeJobsCount={activeJobsCount} />
+
+      <CommandPalette
+        open={isCommandOpen}
+        onClose={() => setIsCommandOpen(false)}
+        jobs={jobs}
+        actions={paletteActions}
+        onSelectJob={(job) => {
+          setActiveTab('hunter');
+          setFocusJobId(job.id);
+        }}
+      />
 
       {/* Modal: AI Feasibility & Price Evaluator */}
       {selectedJobForAnalysis && (
@@ -789,6 +992,7 @@ export default function App() {
             setActiveTab('coder');
           }}
           onUpdateAnalysis={handleUpdateAnalysis}
+          onOpenAISettings={openAISettings}
         />
       )}
 
@@ -802,6 +1006,9 @@ export default function App() {
             setActiveTab('coder');
           }}
           onSaveProposalToJob={handleSaveProposalToJob}
+          onOpenAISettings={openAISettings}
+          autoGenerate={settings.cyborgMode && Boolean(aiStatus?.configured)}
+          defaultDiscountRate={settings.defaultDiscountRate}
         />
       )}
 
@@ -820,8 +1027,13 @@ export default function App() {
       {isSettingsOpen && (
         <SettingsModal
           settings={settings}
+          initialTab={settingsTab}
           onClose={() => setIsSettingsOpen(false)}
           onSave={(newSettings) => setSettings(newSettings)}
+          onAIChanged={(status) => {
+            setAiStatus(status);
+            setAiStatusLoading(false);
+          }}
         />
       )}
     </div>

@@ -34,6 +34,10 @@ interface AutoPilotPanelProps {
   onUpdateSettings: (newSettings: Partial<UserSettings>) => void;
   onTriggerManualScan: () => void;
   isScanning: boolean;
+  /** SPEC-008: تحلیل خودکار پروژه‌های تازه (ارسال پیشنهاد هرگز خودکار نیست). */
+  autoAnalyze: boolean;
+  onToggleAutoAnalyze: () => void;
+  aiConfigured: boolean;
 }
 
 export const AutoPilotPanel: React.FC<AutoPilotPanelProps> = ({
@@ -43,9 +47,10 @@ export const AutoPilotPanel: React.FC<AutoPilotPanelProps> = ({
   onUpdateSettings,
   onTriggerManualScan,
   isScanning,
+  autoAnalyze,
+  onToggleAutoAnalyze,
+  aiConfigured,
 }) => {
-  const [engineActive, setEngineActive] = useState(true);
-  const [scanInterval, setScanInterval] = useState('2');
   const [bridgeStatus, setBridgeStatus] = useState<any>(null);
 
   React.useEffect(() => {
@@ -123,41 +128,46 @@ export const AutoPilotPanel: React.FC<AutoPilotPanelProps> = ({
           <div className="flex items-center justify-between">
             <span className="text-xs text-slate-400 font-medium">وضعیت موتور رصد:</span>
             <div className="flex items-center gap-1.5">
-              <span className={`h-2.5 w-2.5 rounded-full ${engineActive ? 'bg-emerald-400 animate-pulse' : 'bg-slate-600'}`} />
+              <span className={`h-2.5 w-2.5 rounded-full ${autoAnalyze && aiConfigured ? 'bg-emerald-400 animate-pulse' : 'bg-slate-600'}`} />
               <span className="font-mono text-xs font-semibold text-white">
-                {engineActive ? 'فعال (ACTIVE)' : 'متوقف (PAUSED)'}
+                {autoAnalyze ? (aiConfigured ? 'فعال (تحلیل خودکار)' : 'روشن، بدون AI') : 'خاموش'}
               </span>
             </div>
           </div>
 
           <div>
             <h3 className="text-sm font-bold text-white">
-              {settings.cyborgMode ? 'حالت سایبورگ (تایید سریع با ۱ کلیک)' : 'حالت تمام خودکار'}
+              {settings.cyborgMode ? 'حالت سایبورگ (پیش‌نویس خودکار)' : 'حالت دستی (خروجی با کلیک)'}
             </h3>
             <p className="text-xs text-slate-400 mt-1 leading-relaxed">
               {settings.cyborgMode
-                ? 'ربات پروژه‌ها را پیدا کرده، پروپوزال و کد را می‌سازد و فقط برای ارسال نهایی تایید ۱ ثانیه‌ای شما را می‌گیرد.'
-                : 'کلیه مراحل از اسکن تا پاسخ‌دهی طبق ترشولد هوش مصنوعی به صورت کاملاً اتوماتیک انجام می‌شود.'}
+                ? 'با باز کردن پروپوزال یا ورک‌اسپیس کدنویسی، پیش‌نویس با AI ساخته می‌شود؛ ارسال به کارفرما همیشه با تایید شما و دستی است.'
+                : 'تحلیل، پروپوزال و کد فقط با کلیک شما ساخته می‌شوند. هیچ درخواستی خودکار ارسال نمی‌شود.'}
             </p>
+            {autoAnalyze && !aiConfigured && (
+              <p className="mt-2 rounded border border-amber-500/30 bg-amber-500/10 px-2 py-1 text-[10px] text-amber-200">
+                تحلیل خودکار روشن است ولی هنوز provider تنظیم نشده؛ ابتدا از «تنظیمات → هوش مصنوعی» یک اتصال اضافه کنید.
+              </p>
+            )}
           </div>
 
           <div className="flex gap-2">
             <button
               onClick={() => onUpdateSettings({ cyborgMode: !settings.cyborgMode })}
-              className="flex-1 py-1.5 px-3 bg-slate-800 hover:bg-slate-750 text-slate-200 border border-slate-700 rounded-lg text-xs font-medium transition-colors"
+              className="flex-1 py-1.5 px-3 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-lg text-xs font-medium transition-colors"
             >
               تغییر به {settings.cyborgMode ? 'حالت تمام‌خودکار' : 'حالت سایبورگ'}
             </button>
 
             <button
-              onClick={() => setEngineActive(!engineActive)}
+              onClick={onToggleAutoAnalyze}
               className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${
-                engineActive
+                autoAnalyze
                   ? 'bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500/20'
                   : 'bg-emerald-500 text-slate-950 hover:bg-emerald-400'
               }`}
             >
-              {engineActive ? 'توقف موقت' : 'روشن کردن'}
+              {autoAnalyze ? 'توقف تحلیل خودکار' : 'روشن کردن تحلیل خودکار'}
             </button>
           </div>
         </div>
@@ -186,7 +196,7 @@ export const AutoPilotPanel: React.FC<AutoPilotPanelProps> = ({
 
             <div>
               <div className="flex justify-between text-xs mb-1">
-                <span className="text-slate-300">حداقل امتیاز هوش مصنوعی برای ثبت پیشنهاد:</span>
+                <span className="text-slate-300">حداقل امتیاز فید برای تحلیل خودکار:</span>
                 <span className="font-mono font-bold text-sky-400 tabular-nums">
                   {settings.autoBidThreshold}٪
                 </span>
@@ -201,17 +211,10 @@ export const AutoPilotPanel: React.FC<AutoPilotPanelProps> = ({
               />
             </div>
 
-            <div className="flex items-center justify-between text-xs pt-1">
-              <span className="text-slate-400">فواصل رصد سایت‌ها:</span>
-              <select
-                value={scanInterval}
-                onChange={(e) => setScanInterval(e.target.value)}
-                className="bg-slate-950 border border-slate-800 text-white text-xs rounded px-2 py-1"
-              >
-                <option value="1">هر ۱ دقیقه (فوق سریع)</option>
-                <option value="2">هر ۲ دقیقه (استاندارد)</option>
-                <option value="5">هر ۵ دقیقه</option>
-              </select>
+            <div className="rounded-lg border border-slate-800 bg-slate-950/60 p-2 text-[10px] leading-relaxed text-slate-400">
+              فاصله‌ی اسکن خودکار از متغیر محیطی{' '}
+              <span className="font-mono text-slate-300">KONKLANCER_SCAN_INTERVAL_MIN</span> خوانده می‌شود
+              (پیش‌فرض: خاموش). برای شروع اسکن فوری از دکمه‌ی «اجرای اسکن زنده» استفاده کنید.
             </div>
           </div>
         </div>

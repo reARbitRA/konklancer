@@ -5,29 +5,52 @@
 
 ## پیش‌نیازها
 - Node.js 22 یا بالاتر
-- Python 3.10+ (فقط برای اسکنر، اختیاری)
-- یک نمونه‌ی در حال اجرا از Konkred gateway (`gateway/` در [reARbitRA/konkred-AI-ecosystem](https://github.com/reARbitRA/konkred-AI-ecosystem)) و یک کلید آن
+- Python 3.10+ (فقط برای اسکنر و اجرای تست‌های تولیدشده، اختیاری)
+- یک provider هوش مصنوعی سازگار با OpenAI (OpenAI، OpenRouter، Groq، Gemini، DeepSeek، Mistral،
+  Cerebras، Together، Ollama یا LM Studio) — از داخل خود برنامه تنظیم می‌شود.
+- (اختیاری) یک نمونه‌ی در حال اجرا از Konkred gateway (`gateway/` در
+  [reARbitRA/konkred-AI-ecosystem](https://github.com/reARbitRA/konkred-AI-ecosystem)) اگر می‌خواهید
+  چرخش کلیدهای رایگان و مسیریابی `taskType` را از گیت‌وی بگیرید.
 
 ## راه‌اندازی
 ```bash
 npm install --legacy-peer-deps   # یک تضاد peer بین esbuild و vite وجود دارد؛ react-is هم لازم است
-cp .env.example .env             # و مقادیر را پر کنید
+cp .env.example .env             # اختیاری؛ مقادیر AI را می‌توانید از UI هم وارد کنید
 npm start                        # http://localhost:3000
 ```
+
+### تنظیم هوش مصنوعی
+۱. برنامه را باز کنید → «تنظیمات» → تب «هوش مصنوعی».
+۲. «افزودن provider» → نوع provider، آدرس پایه و کلید را وارد کنید (برای Ollama/LM Studio کلید لازم نیست).
+۳. «دریافت مدل‌ها» را بزنید تا `fast`/`strong` خودکار پر شوند، بعد «تست اتصال» و «ذخیره».
+۴. پروفایل (مهارت‌ها، نمونه‌کار، لحن) را پر کنید؛ همان پروفایل در تحلیل، پروپوزال و تولید کد استفاده می‌شود.
+
+کلیدها فقط روی همان ماشینی که سرور اجرا می‌شود در `data/ai-config.json` (مجوز `0600`، در `.gitignore`)
+ذخیره می‌شوند و هرگز به مرورگر برنمی‌گردند. با متغیر `KONKLANCER_AI_CONFIG_FILE` مسیر فایل را عوض کنید.
 
 ### متغیرهای محیطی (`.env`)
 | نام | الزامی | توضیح |
 |-----|--------|-------|
-| `KONKRED_GATEWAY_URL` | بله، برای تحلیل AI | آدرس gateway کانکرد (`gateway/` در [reARbitRA/konkred-AI-ecosystem](https://github.com/reARbitRA/konkred-AI-ecosystem)). |
-| `KONKRED_API_KEY` | بله، برای تحلیل AI | یکی از کلیدهای `USERS_JSON` روی gateway. |
+| `KONKLANCER_AI_CONFIG_FILE` | خیر | مسیر فایل تنظیمات AI (پیش‌فرض `data/ai-config.json`). |
+| `OPENAI_API_KEY` / `GROQ_API_KEY` / `GEMINI_API_KEY` / ... | خیر | اتصال آماده از env (فقط‌خواندنی در UI). راه اصلی، تنظیم از داخل برنامه است. |
+| `KONKRED_GATEWAY_URL` | خیر | آدرس gateway کانکرد؛ فقط اگر گیت‌وی را جدا اجرا می‌کنید. |
+| `KONKRED_API_KEY` | خیر | یکی از کلیدهای `USERS_JSON` روی gateway. |
 | `KONKRED_PRIVACY` | خیر | `any` (پیش‌فرض) یا `private` (فقط providerهایی که روی داده آموزش نمی‌دهند). |
 | `KONKRED_TIMEOUT_MS` / `KONKRED_CACHE_TTL_HOURS` | خیر | مهلت هر تماس (پیش‌فرض ۶۰ ثانیه) و عمر کش تحلیل (پیش‌فرض ۱۶۸ ساعت). |
 | `PORT` | خیر | پیش‌فرض `3000` |
 | `KONKLANCER_DEMO` | خیر | اگر `1` باشد، پروژه‌های ساختگی نمایشی تولید می‌شوند. پیش‌فرض خاموش. |
 
-**مدل‌ها:** Konklancer هیچ مدلی را به‌صورت ثابت انتخاب نمی‌کند. هر درخواست یک `taskType` دارد (`extraction` برای دسته‌بندی، `general` برای تحلیل و پروپوزال، `code-generation` برای کد)، و gateway بر اساس ظرفیت رایگان کلیدها و اولویت هر وظیفه مدل را انتخاب می‌کند.
+**مدل‌ها:** هر اتصال دو مدل دارد (`fast` برای دسته‌بندی/تست، `strong` برای تحلیل، پروپوزال و کد).
+اگر خالی بمانند، فهرست `/models` خود provider خوانده و مدل مناسب پیشنهاد می‌شود. در حالت gateway،
+`taskType` (`extraction` / `general` / `code-generation`) به گیت‌وی می‌رود و خودش مدل را انتخاب می‌کند.
 
-**پاسخ شبیه‌ساز:** اگر هیچ provider زنده‌ای در دسترس نباشد، gateway پاسخ «شبیه‌ساز» برمی‌گرداند. Konklancer این پاسخ را خطا حساب می‌کند (`AI_UNAVAILABLE`) و هرگز آن را به‌عنوان تحلیل نشان نمی‌دهد.
+**پاسخ شبیه‌ساز:** اگر gateway هیچ provider زنده‌ای نداشته باشد، پاسخ «شبیه‌ساز» با مدل `mock:*`
+برمی‌گرداند. Konklancer این پاسخ را خطا حساب می‌کند (`AI_UNAVAILABLE`) و هرگز آن را به‌عنوان تحلیل
+نشان نمی‌دهد.
+
+**اجرای تست تولیدشده:** دکمه‌ی «اجرای تست» در ورک‌اسپیس کد، واقعاً `pytest`/`unittest`/`node --test`
+را در یک پوشه‌ی موقت اجرا می‌کند. این قابلیت پیش‌فرض خاموش است و از «تنظیمات → هوش مصنوعی →
+اجرای تست کد تولیدشده» روشن می‌شود. این یک sandbox امنیتی کامل نیست.
 
 ### توکن گیت‌هاب
 توکن فقط در `sessionStorage` مرورگر نگه‌داری می‌شود و با بستن تب پاک می‌شود. مخزن‌های ساخته‌شده پیش‌فرض **خصوصی** هستند؛ انتشار عمومی نیاز به انتخاب صریح دارد.
@@ -89,6 +112,7 @@ python -m scanner.konklancer_scan enable --telegram workarc       # سریع‌�
 ## محدودیت‌های فعلی
 - انتخابگرهای **کارلنسر** و **پونیشا** روی نمونه‌ی HTML واقعی تأیید شده‌اند (`scan_selectors_verified` در `platforms.json`)؛ انتخابگرهای **پارس‌کدرز** هنوز تأییدنشده‌اند (صفحه در اجرای رانر تایم‌اوت داد) و با `KONKLANCER_HTTP_TIMEOUT=45` دوباره تلاش می‌شود (SPEC-004 R3).
 - سایت‌های JS-محور یا ضدربات (احتمالاً کارلنسر) با `autoscan` خالی برمی‌گردند؛ Playwright پیاده نشده و مسیر جایگزین، ذخیره‌ی صفحه در مرورگر و `autoscan --html` است.
-- احراز هویت برای `/api/*` هنوز اضافه نشده (SPEC-003 R5).
+- احراز هویت برای `/api/*` هنوز اضافه نشده (SPEC-003 R5)؛ برای اجرای شخصی روی `localhost` است.
+- تست زنده با کلید واقعی provider در این محیط انجام نشده؛ مسیر کامل با یک provider سازگار شبیه‌سازی/آزمایش شده است (SPEC-008).
 - پیش‌فیلتر قانون‌محور قبل از تماس AI هنوز نیست (SPEC-004 R5).
 - ذخیره‌سازی داده در مرورگر (localStorage) است؛ SQLite هنوز نیست.
