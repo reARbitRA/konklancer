@@ -19,7 +19,7 @@ interface HeaderProps {
 
 const TABS: Array<{ key: AppTab; label: string; short: string; icon: React.ElementType }> = [
   { key: 'hunter', label: 'پروژه‌ها', short: 'پروژه‌ها', icon: Radar },
-  { key: 'coder', label: 'استودیو کد', short: 'کد', icon: Terminal },
+  { key: 'coder', label: 'محیط توسعه', short: 'کدنویسی', icon: Terminal },
   { key: 'pipeline', label: 'پایپ‌لاین', short: 'پایپ‌لاین', icon: Workflow },
   { key: 'autopilot', label: 'مرکز کنترل', short: 'کنترل', icon: Sparkles },
 ];
@@ -67,6 +67,7 @@ export const Header: React.FC<HeaderProps> = ({
               key={tab.key}
               onClick={() => setActiveTab(tab.key)}
               aria-current={active ? 'page' : undefined}
+              title={tab.key === 'coder' ? 'محیط توسعه: درخت فایل، ادیتور، ابزارهای AI و ترمینال' : tab.label}
               className={`relative flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-[12px] font-medium transition-colors ${
                 active ? 'bg-slate-800/80 text-white' : 'text-slate-400 hover:bg-slate-800/40 hover:text-slate-200'
               }`}
@@ -129,8 +130,8 @@ export const Header: React.FC<HeaderProps> = ({
       <div className="hidden h-5 w-px bg-slate-800 sm:block" />
 
       {/* earnings */}
-      <div className="hidden items-center gap-1.5 text-[11px] lg:flex" title="درآمد پروژه‌های تسویه‌شده">
-        <span className="text-slate-500">درآمد:</span>
+      <div className="hidden items-center gap-1.5 text-[11px] lg:flex" title="جمع مبلغ تخمینی پروژه‌هایی که وضعیت تکمیلشان دستی ثبت شده است">
+        <span className="text-slate-500">تکمیل:</span>
         <span className="font-mono font-semibold tabular-nums text-emerald-300">
           {totalEarningsToday.toLocaleString('fa-IR')}
         </span>

@@ -586,21 +586,37 @@ export const CodeWorkspace: React.FC<CodeWorkspaceProps> = ({
   // ---------- empty state ----------
   if (!job) {
     return (
-      <div className="flex h-full items-center justify-center p-6">
-        <div className="surface max-w-md p-8 text-center">
-          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl border border-emerald-500/25 bg-emerald-500/10 text-emerald-300">
-            <TerminalSquare className="h-6 w-6" />
+      <div className="flex h-full min-h-0 items-center justify-center overflow-y-auto p-4 sm:p-8">
+        <div className="surface w-full max-w-3xl p-5 text-center sm:p-8">
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl border border-emerald-500/30 bg-gradient-to-br from-emerald-500/15 to-sky-500/10 text-emerald-300 shadow-lg shadow-emerald-950/30">
+            <TerminalSquare className="h-7 w-7" />
           </div>
-          <h2 className="mt-3 text-sm font-bold text-white">پروژه‌ای برای کدنویسی انتخاب نشده است</h2>
-          <p className="mx-auto mt-1.5 max-w-sm text-[11.5px] leading-6 text-slate-400">
-            از بخش پروژه‌ها روی «تولید کد» یکی از آگهی‌ها بزنید؛ ایجنت نقشه‌ی پروژه را می‌سازد و فایل‌ها را در ادیتور
-            قابل ویرایش نمایش می‌دهد.
+          <p className="mt-4 font-mono text-[10px] uppercase tracking-[0.2em] text-emerald-300/80">Konklancer · Developer Workbench</p>
+          <h2 className="mt-2 text-lg font-bold text-white sm:text-xl">محیط توسعه‌ی پروژه‌محور</h2>
+          <p className="mx-auto mt-2 max-w-xl text-[11.5px] leading-6 text-slate-400 sm:text-xs">
+            این همان فضای کدنویسی چندپنلی است؛ برای باز کردن آن، یک پروژه را انتخاب کنید. فایل‌ها به شکل پوشه و زیرپوشه نمایش داده می‌شوند و در ادیتور قابل ویرایش‌اند.
           </p>
+
+          <div className="mx-auto mt-5 grid max-w-2xl grid-cols-1 gap-2 text-right sm:grid-cols-3">
+            {[
+              { icon: FolderTree, title: 'Explorer', detail: 'درخت فایل‌ها و جست‌وجوی محتوا' },
+              { icon: Files, title: 'Editor & Tabs', detail: 'ویرایش فایل و تب‌های چندگانه' },
+              { icon: Terminal, title: 'AI & Terminal', detail: 'تولید کد، تست و گزارش اجرا' },
+            ].map((item) => (
+              <div key={item.title} className="rounded-xl border border-slate-800 bg-slate-950/60 p-3">
+                <item.icon className="h-4 w-4 text-emerald-300" />
+                <p className="mt-2 text-[11px] font-semibold text-slate-200">{item.title}</p>
+                <p className="mt-1 text-[10px] leading-5 text-slate-500">{item.detail}</p>
+              </div>
+            ))}
+          </div>
+
           {onBrowseJobs && (
-            <button onClick={onBrowseJobs} className="btn btn-primary mx-auto mt-4 h-8">
-              <ArrowLeft className="h-3.5 w-3.5" /> رفتن به فهرست پروژه‌ها
+            <button onClick={onBrowseJobs} className="btn btn-primary mx-auto mt-5 h-9 px-4">
+              <ArrowLeft className="h-3.5 w-3.5" /> انتخاب پروژه و باز کردن محیط توسعه
             </button>
           )}
+          <p className="mt-3 text-[10px] text-slate-600">در بخش «پروژه‌ها»، جزئیات آگهی را باز کنید و «تولید کد» را بزنید.</p>
         </div>
       </div>
     );

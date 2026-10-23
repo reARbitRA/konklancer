@@ -67,10 +67,10 @@ const SORT_LABEL: Record<SortKey, string> = {
 
 const STATUS_META: Record<FreelanceJob['status'], { label: string; className: string }> = {
   new: { label: 'بررسی‌نشده', className: 'chip' },
-  bidded: { label: 'پیشنهاد آماده', className: 'chip chip-amber' },
+  bidded: { label: 'در پیگیری دستی', className: 'chip chip-amber' },
   in_progress: { label: 'در حال کار', className: 'chip chip-sky' },
   ready: { label: 'آماده‌ی تحویل', className: 'chip chip-violet' },
-  completed: { label: 'تسویه‌شده', className: 'chip chip-accent' },
+  completed: { label: 'تکمیل ثبت‌شده', className: 'chip chip-accent' },
 };
 
 const PLATFORMS: Array<{ key: PlatformKey; label: string }> = [

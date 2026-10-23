@@ -11,7 +11,6 @@ import {
 import { PipelineDashboard } from './PipelineDashboard';
 import { 
   Coins, 
-  Clock, 
   Target, 
   TrendingUp, 
   CheckCircle2, 
@@ -72,13 +71,13 @@ const CustomChartTooltip = ({ active, payload, label }: any) => {
           <span className="text-[11px] font-normal text-slate-400">{data.dayName}</span>
         </p>
         <div className="flex items-center justify-between gap-4 pt-1">
-          <span className="text-slate-400">درآمد روزانه:</span>
+          <span className="text-slate-400">ارزش تخمینی ثبت‌شده:</span>
           <span className="font-mono font-bold text-emerald-400 tabular-nums">
             {(data.earnings as number).toLocaleString('fa-IR')} تومان
           </span>
         </div>
         <div className="flex items-center justify-between gap-4 text-[11px] text-slate-400">
-          <span>تعداد تسویه‌ها:</span>
+          <span>تکمیل‌های ثبت‌شده:</span>
           <span className="font-mono text-slate-200 tabular-nums">{data.jobsCount} پروژه</span>
         </div>
       </div>
@@ -177,10 +176,10 @@ export const PipelineBoard: React.FC<PipelineBoardProps> = ({
 
   const stages: { key: FreelanceJob['status']; title: string; desc: string }[] = [
     { key: 'new', title: '۱. پروژه‌های شکارشده', desc: 'بررسی نشده' },
-    { key: 'bidded', title: '۲. پیشنهاد ارسال‌شده', desc: 'منتظر پاسخ کارفرما' },
+    { key: 'bidded', title: '۲. پیگیری دستی', desc: 'ارسال در پلتفرم خارج از برنامه است' },
     { key: 'in_progress', title: '۳. در حال کدنویسی', desc: 'ایجنت در حال توسعه' },
     { key: 'ready', title: '۴. آماده تحویل', desc: 'کد آماده در مخزن' },
-    { key: 'completed', title: '۵. تسویه‌شده', desc: 'وجه دریافت شد' },
+    { key: 'completed', title: '۵. تکمیل ثبت‌شده', desc: 'وضعیت به‌صورت دستی ثبت شده' },
   ];
 
   return (
@@ -197,10 +196,10 @@ export const PipelineBoard: React.FC<PipelineBoardProps> = ({
           <div className="space-y-1">
             <h2 className="text-sm font-bold text-white flex items-center gap-2">
               <TrendingUp className="h-4 w-4 text-emerald-400" />
-              <span>داشبورد بصری درآمد روزانه (۷ روز اخیر بر اساس تسویه‌ها)</span>
+              <span>ارزش تخمینی پروژه‌های تکمیل‌شده (ثبت دستی، ۷ روز اخیر)</span>
             </h2>
             <p className="text-xs text-slate-400">
-              نمودار خطی نوسان درآمد روزانه مبتنی بر تسویه‌حساب‌های موفق پروژه‌ها
+              برآورد بر اساس مبلغ پیشنهادی یا بودجه‌ی پروژه‌هایی که وضعیت تکمیل آن‌ها دستی ثبت شده است؛ نه تأیید پرداخت واقعی.
             </p>
           </div>
 
@@ -260,20 +259,20 @@ export const PipelineBoard: React.FC<PipelineBoardProps> = ({
         <div className="space-y-1">
           <span className="text-xs text-slate-400 flex items-center gap-1.5">
             <Coins className="h-3.5 w-3.5 text-emerald-400" />
-            <span>مجموع درآمد واریزی امروز:</span>
+            <span>ارزش تخمینی تکمیل‌های ثبت‌شده‌ی امروز:</span>
           </span>
           <div className="font-mono text-xl font-bold text-emerald-400 tabular-nums">
             {todayEarnings.toLocaleString('fa-IR')} تومان
           </div>
           <span className="text-[11px] text-slate-400 block font-mono">
-            {completedJobs.length} پروژه تاکنون تسویه شده است
+            {last7DaysChartData.at(-1)?.jobsCount.toLocaleString('fa-IR') ?? '۰'} تکمیل ثبت‌شده امروز
           </span>
         </div>
 
         <div className="space-y-1">
           <span className="text-xs text-slate-400 flex items-center gap-1.5">
             <Target className="h-3.5 w-3.5 text-amber-400" />
-            <span>پیشرفت هدف روزانه ({dailyEarningsGoal.toLocaleString('fa-IR')} تومان):</span>
+            <span>پیشرفت هدف ارزش تکمیل‌های امروز ({dailyEarningsGoal.toLocaleString('fa-IR')} تومان):</span>
           </span>
           <div className="flex items-center gap-2">
             <div className="flex-1 bg-slate-950 h-2 rounded-full overflow-hidden border border-slate-800">
@@ -285,21 +284,19 @@ export const PipelineBoard: React.FC<PipelineBoardProps> = ({
             <span className="font-mono text-xs font-bold text-slate-200 tabular-nums">{goalProgress}٪</span>
           </div>
           <span className="text-[11px] text-slate-400 block">
-            {todayEarnings >= dailyEarningsGoal ? '✓ تبریک! هدف امروز محقق شد.' : 'فقط چند پروژه تا تکمیل هدف'}
+            {todayEarnings >= dailyEarningsGoal ? 'هدف ارزش ثبت‌شده‌ی امروز محقق شد.' : 'ارزش هدف، بر اساس مبلغ‌های تخمینی و ثبت دستی است.'}
           </span>
         </div>
 
         <div className="space-y-1">
           <span className="text-xs text-slate-400 flex items-center gap-1.5">
-            <Clock className="h-3.5 w-3.5 text-sky-400" />
-            <span>میانگین سرعت تحویل ایجنت:</span>
+            <Code2 className="h-3.5 w-3.5 text-sky-400" />
+            <span>پروژه‌های دارای فایل کد:</span>
           </span>
           <div className="font-mono text-xl font-bold text-sky-300">
-            ۴۵ دقیقه
+            {jobs.filter((job) => Object.keys(job.generatedFiles ?? {}).length > 0).length.toLocaleString('fa-IR')} پروژه
           </div>
-          <span className="text-[11px] text-slate-400 block">
-            نرخ رضایت کارفرمایان: ۹۸٪ با کدهای تست‌شده
-          </span>
+          <span className="text-[11px] text-slate-400 block">دارای فایل در محیط توسعه؛ زمان تحویل و رضایت تا ثبت داده نمایش داده نمی‌شود.</span>
         </div>
       </div>
 
@@ -485,9 +482,9 @@ export const PipelineBoard: React.FC<PipelineBoardProps> = ({
                               <button
                                 onClick={() => onMoveJobStatus(job.id, 'bidded')}
                                 className="text-slate-400 hover:text-white"
-                                title="انتقال به ارسال‌شده"
+                                title="ثبت در مرحله‌ی پیشنهاد آماده (ارسال خودکار انجام نمی‌شود)"
                               >
-                                ثبت ←
+                                ثبت مرحله ←
                               </button>
                             </>
                           )}
@@ -534,7 +531,7 @@ export const PipelineBoard: React.FC<PipelineBoardProps> = ({
                                 onClick={() => onMoveJobStatus(job.id, 'completed')}
                                 className="px-2 py-0.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold rounded text-[10px]"
                               >
-                                تسویه شد ✓
+                                ثبت تکمیل ✓
                               </button>
                             </>
                           )}
@@ -542,7 +539,7 @@ export const PipelineBoard: React.FC<PipelineBoardProps> = ({
                           {stage.key === 'completed' && (
                             <div className="flex items-center gap-1 text-emerald-400 font-medium text-[11px]">
                               <CheckCircle2 className="h-3.5 w-3.5" />
-                              <span>مبلغ دریافت شد</span>
+                              <span>تکمیل توسط شما ثبت شده</span>
                             </div>
                           )}
                         </div>
