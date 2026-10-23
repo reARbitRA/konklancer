@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - arena/bb8cb4b4-konklancer
+      - arena/5c65e810-konklancer
     paths:
       - 'mobile/**'
       - '.github/workflows/build-android-apk.yml'
@@ -13,7 +14,7 @@ on:
         description: HTTPS address of the personal Konklancer server
         required: true
         type: string
-        default: 'https://3000-i2b82mc4n98k6zu2kjmoo.e2b.app'
+        default: 'https://3000-ibmwu4b9gbivgs9usyly8.e2b.app'
 
 permissions:
   contents: read
@@ -24,7 +25,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
-      CAPACITOR_SERVER_URL: ${{ github.event.inputs.server_url || 'https://3000-i2b82mc4n98k6zu2kjmoo.e2b.app' }}
+      # اولویت: ورودی workflow_dispatch → متغیر مخزن (vars.KONKLANCER_SERVER_URL) → پیش‌فرض فعلی.
+      # برای نصب پایدار روی گوشی، متغیر مخزن را روی آدرس دائمی سرور خودتان بگذارید.
+      CAPACITOR_SERVER_URL: ${{ github.event.inputs.server_url || vars.KONKLANCER_SERVER_URL || 'https://3000-ibmwu4b9gbivgs9usyly8.e2b.app' }}
     steps:
       - name: Check out source
         uses: actions/checkout@v5
