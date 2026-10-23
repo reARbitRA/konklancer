@@ -17,7 +17,7 @@ on:
         default: 'https://3000-ibmwu4b9gbivgs9usyly8.e2b.app'
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build-apk:
@@ -97,3 +97,28 @@ jobs:
           path: mobile/android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 7
+
+      # انتشار APK در یک prerelease چرخشی تا لینک دانلود پایدار و مستقیم روی گوشی باز شود.
+      - name: Publish installable APK to the rolling prerelease
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SERVER_URL: ${{ env.CAPACITOR_SERVER_URL }}
+        run: |
+          set -euo pipefail
+          tag="apk-latest"
+          apk="mobile/android/app/build/outputs/apk/debug/app-debug.apk"
+          notes=$(cat <<EOF
+          APK پیش‌نمایش Konklancer (debug، قابل نصب).
+
+          این بیلد به سرور زیر وصل می‌شود: ${SERVER_URL}
+
+          اگر آدرس سرور عوض شد، این ورک‌فلو را با ورودی server_url دوباره اجرا کنید
+          (یا متغیر مخزن KONKLANCER_SERVER_URL را به آدرس دائمی خودتان تغییر دهید).
+          EOF
+          )
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release edit "$tag" --notes "$notes" --prerelease
+          else
+            gh release create "$tag" --title "Konklancer APK — آخرین بیلد" --notes "$notes" --prerelease --latest=false
+          fi
+          gh release upload "$tag" "$apk#konklancer-debug.apk" --clobber
