@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ChevronDown,
   ChevronRight,
@@ -199,12 +199,17 @@ export const FileTree: React.FC<FileTreeProps> = ({
   forceExpanded = false,
 }) => {
   const folders = useMemo(() => allFolderPaths(nodes), [nodes]);
+  const knownRef = useRef<Set<string>>(new Set(folders));
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set(folders));
 
+  // فقط پوشه‌های تازه باز می‌شوند؛ پوشه‌هایی که کاربر بسته است بسته می‌مانند (مثل VS Code).
   useEffect(() => {
+    const fresh = folders.filter((folder) => !knownRef.current.has(folder));
+    if (fresh.length === 0) return;
+    fresh.forEach((folder) => knownRef.current.add(folder));
     setExpanded((current) => {
       const next = new Set(current);
-      folders.forEach((folder) => next.add(folder));
+      fresh.forEach((folder) => next.add(folder));
       return next;
     });
   }, [folders]);

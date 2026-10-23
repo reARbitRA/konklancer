@@ -162,9 +162,18 @@ export default function App() {
   const [cloudInfo, setCloudInfo] = useState<{ enabled: boolean; repo?: string; status?: any }>({ enabled: false });
   const [cloudBusy, setCloudBusy] = useState(false);
 
-  // Sync state to localStorage
+  // Sync state to localStorage — سهمیه‌ی مرورگر ممکن است با فایل‌های تولیدشده پر شود؛
+  // در آن صورت برنامه نباید کرش کند و باید صادقانه هشدار بدهد.
+  const [storageWarning, setStorageWarning] = useState<string | null>(null);
   useEffect(() => {
-    localStorage.setItem('freelanceflow_jobs', JSON.stringify(jobs));
+    try {
+      localStorage.setItem('freelanceflow_jobs', JSON.stringify(jobs));
+      setStorageWarning(null);
+    } catch {
+      setStorageWarning(
+        'حافظه‌ی مرورگر پر شده است؛ تغییرات آخر فقط تا بستن این تب باقی می‌مانند. فایل‌های پروژه را از استودیو کد در GitHub ثبت کنید.',
+      );
+    }
   }, [jobs]);
 
   // SPEC-004: خواندن فید از سرور (خروجی اسکنر) به‌جای داده‌ی ساختگی.
@@ -823,6 +832,16 @@ export default function App() {
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {storageWarning && (
+        <div className="flex shrink-0 items-center gap-1.5 border-b border-amber-800/50 bg-amber-950/30 px-3 py-1 text-[10px] text-amber-200">
+          <AlertTriangle className="h-3 w-3 shrink-0" />
+          <span className="truncate">{storageWarning}</span>
+          <button onClick={() => setStorageWarning(null)} className="ms-auto shrink-0 text-amber-400 hover:text-amber-200">
+            <X className="h-3 w-3" />
+          </button>
         </div>
       )}
 
