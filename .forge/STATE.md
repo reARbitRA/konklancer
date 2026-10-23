@@ -21,11 +21,10 @@
 4. T-004 R7: اعلان اختیاری تلگرام برای پروژه‌های بالای آستانه.
 5. T-005: SQLite + `POST /api/bids` + `GET /api/stats` (مبنای قیمت‌گذاری مبتنی بر نتیجه).
 6. کالیبراسیون انتخابگر یک پلتفرم واقعی و ثبت آن در platforms.json.
-## Android APK
-- بیلد خودکار روی push شاخه‌ی `arena/5c65e810-konklancer` (فایل‌های `mobile/**` یا خود workflow).
-- خروجی: prerelease چرخشی `apk-latest` → `konklancer-debug.apk` + artifact هر اجرا.
-- آدرس سرور: `server_url` ورودی → `vars.KONKLANCER_SERVER_URL` → پیش‌فرض (آدرس موقت sandbox).
-- APK فقط WebView است (بدون سرور/اسکنر روی گوشی)؛ جزئیات در `mobile/README-fa.md`.
+## Android APK (Standalone v2.0)
+- **کاملاً مستقل (Standalone):** کل باندل وب (`dist/*` شامل رابط کاربری، موتور AI ایزومورفیک و ۱۳۲ پروژه‌ی واقعی `cloud-feed.jsonl`) داخل `mobile/www/` و APK بسته‌بندی می‌شود (`src/utils/standaloneRuntime.ts`).
+- **بدون وابستگی به سرور خارجی:** `mobile/capacitor.config.ts` دیگر به آدرس موقت e2b وصل نمی‌شود و اپ از داخل خود گوشی (`https://localhost`) اجرا می‌شود و هرگز خطای Not Found نمی‌دهد.
+- **امضای ثابت و سازگاری نصب:** با کلید PKCS12 پایدار (`v1SigningEnabled` + `v2SigningEnabled`)، `targetSdkVersion = 35` و شناسه پکیج `com.rearbitra.konklancer.app` (`versionCode 2`) بیلد Release امضاشده تولید و در Release `apk-latest` (`--latest`) با هر سه نام `konklancer.apk`, `konklancer-debug.apk`, `app-debug.apk` منتشر می‌شود.
 
 ## Known issues
 - `npm install` به `--legacy-peer-deps` نیاز دارد؛ `vite.config.ts` از `__dirname` استفاده می‌کند (هشدار Vite).
@@ -74,3 +73,11 @@
 - تأیید: `npx tsc --noEmit` تمیز؛ 57/57 تست سرور؛ `vite build` سالم؛ SSR smoke برای ۱۵ کامپوننت؛
   E2E استریم با mock provider (plan→file-start→file-done→done) و `/api/run-tests` واقعی.
 - باز: SPEC-009 DRAFT است؛ بازبینی چشمی روی مرورگر واقعی انجام نشده (محیط بدون مرورگر).
+
+## 2026-10-23 — بازخورد واقعی دستگاه پس از انتشار APK
+- مشکل spin در تصویر با یک حلقه‌ی effect واقعی مرتبط بود: callback وضعیت AI در والد inline بود و هویت آن هر rerender عوض می‌شد؛ loader تنظیمات دوباره اجرا می‌شد. `AISettingsPanel` اکنون callback را در ref نگه می‌دارد و request اولیه فقط یک بار اجرا می‌شود. تست React+JSDOM ثابت کرد با rerender والد فقط یک GET انجام می‌شود.
+- فرم افزودن provider در حالت خالی از قبل باز است، انتخاب provider بصری و مراحل گرفتن کلید/تست/ذخیره واضح‌اند. متن ذخیره‌سازی در APK می‌گوید کلید در فضای خصوصی همان گوشی می‌ماند.
+- محیط توسعه از تب «محیط توسعه» دسکتاپ / «کدنویسی» موبایل و Ctrl+K قابل دسترسی است. اگر پروژه‌ای انتخاب نشده باشد، صفحه مسیر «پروژه‌ها → انتخاب پروژه → تولید کد» و ابزارهای Explorer/Editor/AI/Terminal را توضیح می‌دهد.
+- پنل پایپ‌لاین responsive و برچسب‌دار شد؛ ادعاهای ثابت ۴۵ دقیقه و ۹۸٪ حذف؛ منتشرکردن کد دیگر وضعیت را به تکمیل/پرداخت تبدیل نمی‌کند.
+- راستی‌آزمایی این دور: tsc تمیز، 57/57 تست TypeScript، build موفق، 54/54 تست پایتون، regression JSDOM یک درخواست تنظیمات.
+- باز: باید commit و push شود تا CI APK تازه بسازد؛ سپس نصب/تست provider واقعی و بازبینی چشمی روی دستگاه مالک لازم است. کلید/provider واقعی در این محیط موجود نیست.

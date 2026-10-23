@@ -35,3 +35,10 @@ verification: npx tsc --noEmit && npx tsx --test server/*.test.ts
 - [x] تأیید SPEC-008 توسط مالک — ۲۰۲۶-۱۰-۲۳ («تایید می‌کنم»)؛ SPEC-006 R1/R2 superseded
 - [ ] تأیید زنده روی یک provider واقعی (کلید در این محیط موجود نیست؛ E2E فقط با mock انجام شد)
 - [ ] احراز هویت `/api/*` (T-003 R5) — پیش‌فرض فقط برای اجرای محلی شخصی مناسب است
+
+## Follow-up regression fix (2026-10-23)
+- Root cause from Android screenshot: `AISettingsPanel` derived `refresh` from the parent’s inline `onChanged`; the status update rerendered the parent, recreated `refresh`, and retriggered the loading effect indefinitely.
+- Fixed by holding the latest callback in a ref and keeping the initial config loader stable; background refresh no longer replaces the whole panel with a spinner.
+- When no provider exists, the panel now opens the add-provider form and shows a clear three-step setup. Storage copy distinguishes on-device APK storage from server storage.
+- JSDOM/React regression harness with a parent rerender: exactly one `/api/ai/config` request, one parent status update, and the provider form rendered (temporary test, not an added dependency).
+- Full `npx tsc --noEmit`, `npm test` (57/57), and `npm run build` pass.

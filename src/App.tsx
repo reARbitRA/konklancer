@@ -30,6 +30,7 @@ import { categorizeJobWithGemini } from './utils/geminiCategorizer';
 import { categoryLabel, detectCategory } from '../shared/taxonomy';
 import { FeedStatusBar, FeedSource } from './components/FeedStatusBar';
 import { getAIStatus, type AIStatusPayload } from './utils/aiClient';
+import { isCapacitorNative, isStandaloneMode } from './utils/standaloneRuntime';
 
 /**
  * Runtime Type Guard to strictly validate incoming Socket.io data
@@ -269,7 +270,7 @@ export default function App() {
       const biddedJobs = jobsRef.current.filter(j => j.status === 'bidded');
       if (biddedJobs.length > 0 && Notification.permission === 'granted') {
         new Notification('یادآوری بررسی وضعیت پروژه‌ها', {
-          body: `شما ${biddedJobs.length} پروژه در وضعیت «ارسال پیشنهاد» دارید. برای بررسی بازخوردها اقدام کنید.`,
+          body: `شما ${biddedJobs.length} پروژه در مرحله‌ی «پیگیری دستی» دارید؛ ارسال و بررسی بازخورد در پلتفرم انجام می‌شود.`,
         });
       }
     }, 4 * 60 * 60 * 1000); // 4 hours
@@ -439,6 +440,14 @@ export default function App() {
 
   // Robust Socket.io Client Setup with Exponential Backoff Reconnection Policy
   useEffect(() => {
+    if (isCapacitorNative() || isStandaloneMode()) {
+      setSocketConnected(true);
+      setSocketError(null);
+      setIsReconnecting(false);
+      addLog('حالت مستقل (Standalone) فعال است؛ فید و هوش مصنوعی مستقیماً روی دستگاه اجرا می‌شوند.', 'scan');
+      return;
+    }
+
     const socket: Socket = io({
       transports: ['websocket', 'polling'],
       reconnection: true,
@@ -457,6 +466,13 @@ export default function App() {
     });
 
     socket.on('disconnect', (reason) => {
+      if (isStandaloneMode()) {
+        setSocketConnected(true);
+        setSocketError(null);
+        setIsReconnecting(false);
+        socket.disconnect();
+        return;
+      }
       setSocketConnected(false);
       if (reason === 'io server disconnect') {
         // The server forcefully disconnected; reconnect manually
@@ -467,6 +483,13 @@ export default function App() {
 
     // Persistent Error & Connect Error Handlers
     socket.on('connect_error', (err) => {
+      if (isStandaloneMode()) {
+        setSocketConnected(true);
+        setSocketError(null);
+        setIsReconnecting(false);
+        socket.disconnect();
+        return;
+      }
       setSocketConnected(false);
       setIsReconnecting(true);
       const errMsg = `خطای اتصال به بریج وب‌سوکت: ${err.message || 'شبکه در دسترس نیست'}.`;
@@ -656,8 +679,7 @@ export default function App() {
               ...j,
               proposal,
               proposedPrice: price,
-              // وضعیت «ارسال‌شده» فقط با اقدام صریح کاربر در پایپ‌لاین ثبت می‌شود؛
-              // تولید متن به معنی ارسال آن به کارفرما نیست.
+              // وضعیت در برنامه فقط با اقدام صریح کاربر تغییر می‌کند؛ متن تولیدشده خودکار ارسال نمی‌شود.
             }
           : j
       )
@@ -680,21 +702,12 @@ export default function App() {
   };
 
   const handleCompleteJob = (jobId: string, repoUrl: string) => {
-    const todayIso = new Date().toISOString().split('T')[0];
     setJobs((prev) =>
       prev.map((j) =>
-        j.id === jobId
-          ? {
-              ...j,
-              repoUrl,
-              status: 'completed',
-              completedAt: j.completedAt || todayIso,
-            }
-          : j
-      )
+        j.id === jobId ? { ...j, repoUrl, status: 'ready' } : j,
+      ),
     );
-    playChime();
-    addLog(`پروژه "${jobId}" در گیت‌هاب منتشر شد و درآمد آن تسویه گردید!`, 'payment');
+    addLog(`کد پروژه «${jobId}» در مخزن گیت‌هاب منتشر شد؛ منتظر بازبینی کارفرماست و تکمیل/پرداخت فقط با ثبت دستی شما مشخص می‌شود.`, 'github');
   };
 
   const handleMoveJobStatus = (jobId: string, newStatus: FreelanceJob['status']) => {
@@ -777,7 +790,7 @@ export default function App() {
 
   const paletteActions: PaletteAction[] = [
     { id: 'tab-hunter', label: 'رفتن به پروژه‌ها', hint: 'فهرست و جست‌وجوی آگهی‌ها', icon: Radar, run: () => goToTab('hunter') },
-    { id: 'tab-coder', label: 'رفتن به استودیو کد', hint: 'ادیتور، فایل‌ها و ایجنت', icon: Terminal, run: () => goToTab('coder') },
+    { id: 'tab-coder', label: 'رفتن به محیط توسعه', hint: 'Explorer، ویرایش فایل‌ها، ابزار AI و ترمینال تست', icon: Terminal, run: () => goToTab('coder') },
     { id: 'tab-pipeline', label: 'رفتن به پایپ‌لاین', hint: 'برد وضعیت پروژه‌ها', icon: Workflow, run: () => goToTab('pipeline') },
     { id: 'tab-autopilot', label: 'رفتن به مرکز کنترل', hint: 'اسکن، تحلیل خودکار، لاگ‌ها', icon: Sparkles, run: () => goToTab('autopilot') },
     {
@@ -790,7 +803,7 @@ export default function App() {
         handleQuickScan();
       },
     },
-    { id: 'ai-settings', label: 'تنظیم هوش مصنوعی', hint: 'provider، کلید و مدل', icon: Sparkles, run: openAISettings },
+    { id: 'ai-settings', label: 'تنظیم هوش مصنوعی', hint: 'انتخاب سرویس، واردکردن کلید API، تست اتصال و انتخاب مدل', icon: Sparkles, run: openAISettings },
     { id: 'settings', label: 'تنظیمات برنامه', hint: 'عمومی، گیت‌هاب، اجرای کد', icon: Settings, run: openSettings },
   ];
 

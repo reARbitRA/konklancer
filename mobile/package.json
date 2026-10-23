@@ -6,7 +6,8 @@
   "description": "Android WebView wrapper for the personal Konklancer preview",
   "scripts": {
     "android:add": "cap add android",
-    "android:sync": "cap sync android"
+    "android:sync": "cap sync android",
+    "android:bundle": "npm --prefix .. run build && rm -rf www && mkdir -p www && cp -R ../dist/* www/ && cap sync android"
   },
   "dependencies": {
     "@capacitor/android": "8.5.3",

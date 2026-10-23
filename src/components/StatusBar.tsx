@@ -22,7 +22,7 @@ interface StatusBarProps {
 export const StatusBar: React.FC<StatusBarProps> = ({ socketConnected, aiStatus, feedSource, jobCount, activeTab }) => {
   const tabLabel: Record<AppTab, string> = {
     hunter: 'پروژه‌ها',
-    coder: 'استودیو کد',
+    coder: 'محیط توسعه',
     pipeline: 'پایپ‌لاین',
     autopilot: 'مرکز کنترل',
   };
@@ -71,7 +71,7 @@ interface MobileNavProps {
 
 const MOBILE_TABS: Array<{ key: AppTab; label: string; icon: React.ElementType }> = [
   { key: 'hunter', label: 'پروژه‌ها', icon: Radar },
-  { key: 'coder', label: 'استودیو', icon: Terminal },
+  { key: 'coder', label: 'کدنویسی', icon: Terminal },
   { key: 'pipeline', label: 'پایپ‌لاین', icon: Workflow },
   { key: 'autopilot', label: 'کنترل', icon: Sparkles },
 ];
@@ -89,6 +89,7 @@ export const MobileNav: React.FC<MobileNavProps> = ({ activeTab, setActiveTab, a
           key={tab.key}
           onClick={() => setActiveTab(tab.key)}
           aria-current={active ? 'page' : undefined}
+          title={tab.key === 'coder' ? 'درخت فایل، ویرایش کد، ابزارهای AI و ترمینال تست' : tab.label}
           className={`relative flex flex-1 flex-col items-center gap-1 py-2 text-[10px] font-medium transition-colors ${
             active ? 'text-emerald-300' : 'text-slate-500'
           }`}

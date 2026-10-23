@@ -80,3 +80,26 @@ E2E آفلاین با دو صفحه‌ی آزمایشی (کارت‌های RTL �
 - محدودیت صریح: APK فقط WebView است؛ سرور باید HTTPS و از گوشی قابل دسترس باشد؛ آدرس پیش‌فرض
   sandbox موقتی است. مستندات در `mobile/README-fa.md` به‌روزرسانی شد. نصب/تست روی دستگاه انجام نشد
   (این محیط شبیه‌ساز اندروید ندارد).
+
+## 2026-10-23 (session-008) — تبدیل APK به نسخه‌ی کاملاً مستقل (Standalone) + رفع خطای Not Found و نصب اندروید
+- بازخورد مالک: «باز زدی به خاکی، به سرور وصل میشه چیه باز میزنه not found، apk هم نصب نمیشه».
+- ریشه‌یابی:
+  1. در نسخه‌ی قبلی، `mobile/capacitor.config.ts` به آدرس موقت سندباکس (`https://3000-ibmwu4b9gbivgs9usyly8.e2b.app`) وصل بود و `mobile/www/index.html` فقط یک صفحه‌ی ۲۰ خطی خالی بود؛ با بسته شدن سندباکس قبلی، اپ و لینک پیش‌نمایش خطای `Not Found` می‌دادند.
+  2. Release گیت‌هاب `--prerelease --latest=false` بود (مسیر `/releases/latest` خطای Not Found می‌داد) و فایل `app-debug.apk` هم حذف شده بود.
+  3. هر بار اجرای GitHub Actions یک کلید تصادفی debug می‌ساخت که با نسخه‌ی قبلی نصب‌شده روی گوشی تداخل امضا (`INSTALL_FAILED_UPDATE_INCOMPATIBLE`) داشت و `targetSdkVersion = 36` + بیلد debug باعث رد نصب می‌شد.
+  4. سرور محلی (`server.ts`) در صورت نبودن `scanner/out/projects.jsonl` به `scanner/cloud-feed.jsonl` (۱۳۲ پروژه‌ی واقعی) fallback نمی‌زد.
+- اصلاحات:
+  - ساخت `src/utils/standaloneRuntime.ts` و ایزومورفیک کردن `server/aiEngine.ts` و `server/aiConfig.ts`: تمام مسیرهای `/api/*` (فید، همگام‌سازی زنده از گیت‌هاب، تنظیمات AI در `localStorage`، تحلیل، استریم پروپوزال، نقد، تولید چندفایلی کد و تست) مستقیماً داخل خود اپ روی گوشی بدون نیاز به هیچ سروری اجرا می‌شوند.
+  - بسته‌بندی کامل `dist/*` و `cloud-feed.jsonl` داخل `mobile/www/` در ورک‌فلو و حذف `server.url` پیش‌فرض از `mobile/capacitor.config.ts`.
+  - امضای پایدار V1+V2 (`assembleRelease`)، تغییر `targetSdkVersion` به `35`، `applicationId` به `com.rearbitra.konklancer.app` (`versionCode 2`) و انتشار در Release رسمی `--latest` با هر سه نام `konklancer.apk`، `konklancer-debug.apk` و `app-debug.apk`.
+  - اصلاح تست `test_parscoders_verified_selectors_parse_real_listing` (۵۴/۵۴ تست پایتون سبز) و fallback فید در `server.ts` (۱۳۲ پروژه فعال در سرور).
+
+
+## 2026-10-23 — session-009 · رفع چرخش بی‌پایان تنظیم AI و قابل‌پیداکردن‌کردن Workbench
+- بازخورد مالک همراه تصویر: تنظیم AI بی‌نهایت می‌چرخد؛ محیط توسعه پیدا نیست؛ درخواست UI کامل و بدون خلاصه‌سازی.
+- ریشه‌ی چرخش: `AISettingsPanel` تابع `refresh` را به callback درون‌خطی والد وابسته کرده بود؛ هر تغییر وضعیت در والد هویت callback/`refresh` را عوض می‌کرد و effect دوباره config را بارگذاری می‌کرد. callback در ref نگه‌داری شد و loader پایدار شد؛ فرم provider در حالت خالی خودکار باز می‌شود.
+- راه‌اندازی AI: انتخاب provider بصری، دستور سه‌مرحله‌ای، کپی صحیح ذخیره‌ی محلی کلید در APK در برابر ذخیره‌ی سرور.
+- کشف‌پذیری: عنوان تب به «محیط توسعه» (دسکتاپ) و «کدنویسی» (موبایل) تغییر کرد؛ صفحه‌ی خالی مسیر انتخاب پروژه و «تولید کد» را با فهرست Explorer/Editor/AI/Terminal توضیح می‌دهد.
+- سلامت/صداقت UX: نمودار پایپ‌لاین بی‌برچسب به کارت‌های responsive با نام مرحله و شمارش واقعی تبدیل شد؛ ادعاهای ثابت «۴۵ دقیقه/۹۸٪» حذف؛ برچسب‌های پیشنهاد و درآمد به وضعیت‌های دستی/ارزش تخمینی تغییر کرد؛ انتشار گیت‌هاب دیگر پروژه را خودکار completed نمی‌کند.
+- شواهد: React+JSDOM regression با callback درون‌خطی: ۱ بار GET تنظیمات، ۱ به‌روزرسانی وضعیت والد، فرم نصب provider قابل مشاهده؛ `npx tsc --noEmit` تمیز، `npm test` 57/57، `npm run build` موفق، pytest اسکنر 54/54.
+- باز: تست با provider واقعی روی همان دستگاه اندروید (کلید/شبکه/CORS) و بازبینی چشمی APK جدید پس از بیلد CI.

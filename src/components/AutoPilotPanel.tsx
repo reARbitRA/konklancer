@@ -95,10 +95,10 @@ export const AutoPilotPanel: React.FC<AutoPilotPanelProps> = ({
       <div className="border-b border-slate-800 pb-4">
         <h1 className="text-xl font-bold text-white tracking-tight flex items-center gap-2">
           <Radar className="h-5 w-5 text-emerald-400" />
-          <span>مرکز فرمان رادار اتوماسیون و عملیات سایبورگ</span>
+          <span>مرکز اسکن، تحلیل و پیگیری پروژه‌ها</span>
         </h1>
         <p className="text-xs text-slate-400 mt-1">
-          رصد مستمر بازارهای فریلنسری داخلی و بین‌المللی · فیلتر خودکار تسک‌های زودبازده با کمترین زحمت ممکن
+          اسکن واقعی با اجرای دستی شما · تحلیل خودکار پروژه‌های تازه فقط در صورت فعال‌سازی · ارسال پیشنهاد همیشه دستی است
         </p>
       </div>
 
@@ -106,7 +106,7 @@ export const AutoPilotPanel: React.FC<AutoPilotPanelProps> = ({
       <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-sm space-y-4">
         <h2 className="text-sm font-bold text-white flex items-center gap-2">
           <TrendingUp className="h-4 w-4 text-emerald-400" />
-          <span>روند درآمد ۷ روز اخیر</span>
+          <span>ارزش تخمینی تکمیل‌های ثبت‌شده در ۷ روز اخیر</span>
         </h2>
         <div className="h-48 w-full">
           <ResponsiveContainer width="100%" height="100%">
@@ -156,7 +156,7 @@ export const AutoPilotPanel: React.FC<AutoPilotPanelProps> = ({
               onClick={() => onUpdateSettings({ cyborgMode: !settings.cyborgMode })}
               className="flex-1 py-1.5 px-3 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-lg text-xs font-medium transition-colors"
             >
-              تغییر به {settings.cyborgMode ? 'حالت تمام‌خودکار' : 'حالت سایبورگ'}
+              تغییر به {settings.cyborgMode ? 'حالت دستی' : 'تولید پیش‌نویس خودکار'}
             </button>
 
             <button
@@ -179,7 +179,7 @@ export const AutoPilotPanel: React.FC<AutoPilotPanelProps> = ({
           <div className="space-y-3">
             <div>
               <div className="flex justify-between text-xs mb-1">
-                <span className="text-slate-300">درصد تخفیف پیشنهادی جهت برنده شدن:</span>
+                <span className="text-slate-300">درصد تخفیف پیشنهادی نسبت به بودجه:</span>
                 <span className="font-mono font-bold text-emerald-400 tabular-nums">
                   {settings.defaultDiscountRate}٪
                 </span>

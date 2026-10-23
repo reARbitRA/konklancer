@@ -43,3 +43,9 @@ verification: npx tsc --noEmit && npx tsx --test server/*.test.ts && npx vite bu
 - [ ] تأیید SPEC-009 توسط مالک (برای خروج از DRAFT)
 - [ ] بازبینی چشمی روی مرورگر واقعی (این محیط مرورگر/Chromium ندارد؛ بررسی با SSR + build)
 - [ ] Code-split کردن باندل (~1.1MB) در صورت نیاز
+
+## Follow-up after owner device feedback (2026-10-23)
+- Clearer navigation labels: the code tab is now «محیط توسعه» on desktop and «کدنویسی» on mobile; the blank workspace explains the project-selection → «تولید کد» path and enumerates Explorer, editor/tabs, AI tools, and terminal.
+- Replaced the unlabeled D3 pipeline bars with responsive, labeled stage cards; preserved all stages and live counts.
+- Removed unsupported fixed claims (45-minute delivery and 98% satisfaction), made stage/value labels explicit about manual recording and estimates, and keep a GitHub code publish in «آماده‌ی تحویل» rather than marking the job completed/paid.
+- Verified: `npx tsc --noEmit`; `npm test` 57/57; `npm run build`; scanner suite 54/54; AI settings rerender regression harness (single config fetch).

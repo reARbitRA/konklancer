@@ -51,3 +51,15 @@
 - SPEC-009 R26–R27 → src/components/CodeWorkspace.tsx (استریم، پنل‌های قابل بستن، حالت موبایل)
 - SPEC-009 R28–R30 → src/components/workspace/MarkdownView.tsx، index.html (برند Konklancer)
 - تست‌ها → SSR smoke (۱۵ کامپوننت) + E2E mock provider + 57/57 تست سرور؛ هیچ تست جدید سروری لازم نبود
+
+## 2026-10-23 · T-009 (session-008) · Standalone APK + On-Device Runtime
+- SPEC-008 / SPEC-009 (اجرای مستقل روی موبایل بدون سرور) → `src/utils/standaloneRuntime.ts`, `server/aiEngine.ts`, `server/aiConfig.ts`, `mobile/capacitor.config.ts`, `mobile/android/app/build.gradle`, `.github/workflows/build-android-apk.yml`
+- SPEC-004 (فید پیش‌فرض از `scanner/cloud-feed.jsonl`) → `server.ts` (`loadFeedJobs`), `package.json` (`prebuild`), `scanner/tests/test_live_fixtures.py`
+
+
+## 2026-10-23 · T-008/T-009 (session-009) · بازخورد دستگاه مالک
+- SPEC-008 R21/R22 → `src/components/AISettingsPanel.tsx`: `onChangedRef` و `refresh` پایدار برای جلوگیری از چرخه‌ی fetch؛ setup خودکار provider و پیام ذخیره‌سازی درست برای APK.
+- SPEC-009 R4/R10 → `src/components/Header.tsx`, `src/components/StatusBar.tsx`, `src/App.tsx`: تب محیط توسعه با نام واضح روی دسکتاپ/موبایل و در پالت.
+- SPEC-009 R19/R24/R27 → `src/components/CodeWorkspace.tsx`: صفحه‌ی شروع با شرح درخت فایل، ادیتور، ابزار AI و ترمینال، و هدایت به پروژه.
+- SPEC-009 honesty/accessibility → `src/components/PipelineDashboard.tsx` responsive stage cards؛ `PipelineBoard.tsx`, `JobHunter.tsx`, `AutoPilotPanel.tsx`, `App.tsx`: شمارش/ارزش برچسب‌خورده‌ی واقعی، وضعیت پیشنهاد و تکمیل دستی، و عدم ادعای تسویه پس از push.
+- رگرسیون UI → JSDOM harness موقت: parent rerender حداکثر/دقیقاً یک config fetch؛ dependency جدیدی به پروژه افزوده نشد.

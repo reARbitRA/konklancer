@@ -150,7 +150,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               <div className="space-y-1.5">
                 <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-200">
                   <Coins className="h-4 w-4 text-amber-400" />
-                  <span>هدف درآمد روزانه (تومان):</span>
+                  <span>هدف روزانه‌ی ارزش پروژه‌های تکمیل‌شده (تومان):</span>
                 </label>
                 <input
                   type="number"

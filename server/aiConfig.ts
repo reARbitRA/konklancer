@@ -6,9 +6,28 @@
  *  - کلیدها هرگز در پاسخ GET برنمی‌گردند (فقط hasKey و MASKED_KEY).
  *  - connectionهای آمده از env فقط‌خواندنی‌اند و در فایل ذخیره نمی‌شوند.
  */
-import crypto from 'crypto';
-import fs from 'fs';
-import path from 'path';
+const getBuiltin = <T = any>(name: string): T | null => {
+  try {
+    const proc = (globalThis as any).process;
+    if (proc && typeof proc.getBuiltinModule === 'function') {
+      return proc.getBuiltinModule(name) as T;
+    }
+  } catch {
+    /* محیط مرورگر / وب‌ویو */
+  }
+  return null;
+};
+
+const nodeCrypto = getBuiltin<typeof import('crypto')>('crypto');
+const nodeFs = getBuiltin<typeof import('fs')>('fs');
+const nodePath = getBuiltin<typeof import('path')>('path');
+
+const randomHex = (bytes: number): string => {
+  if (nodeCrypto) return nodeCrypto.randomBytes(bytes).toString('hex');
+  return Array.from({ length: bytes }, () => Math.floor(Math.random() * 256).toString(16).padStart(2, '0')).join('');
+};
+
+const BROWSER_STORAGE_KEY = 'konklancer_ai_config_v1';
 import {
   DEFAULT_PROFILE,
   MASKED_KEY,
@@ -40,8 +59,12 @@ export interface LoadedAIConfig {
 
 const PROJECT_AI_ID = /^[a-zA-Z0-9_-]{1,64}$/;
 
-export function aiConfigPath(env: NodeJS.ProcessEnv = process.env): string {
-  return env.KONKLANCER_AI_CONFIG_FILE?.trim() || path.join(process.cwd(), 'data', 'ai-config.json');
+export function aiConfigPath(env: NodeJS.ProcessEnv = (typeof process !== 'undefined' && process.env) ? process.env : ({} as any)): string {
+  if (env?.KONKLANCER_AI_CONFIG_FILE?.trim()) return env.KONKLANCER_AI_CONFIG_FILE.trim();
+  if (nodePath && typeof process !== 'undefined' && typeof process.cwd === 'function') {
+    return nodePath.join(process.cwd(), 'data', 'ai-config.json');
+  }
+  return `localStorage://${BROWSER_STORAGE_KEY}`;
 }
 
 const clamp = (value: unknown, min: number, max: number, fallback: number): number => {
@@ -85,7 +108,7 @@ function sanitizeConnection(
   const id =
     typeof input.id === 'string' && PROJECT_AI_ID.test(input.id)
       ? input.id
-      : existing?.id ?? `conn-${Date.now().toString(36)}-${index}-${crypto.randomBytes(3).toString('hex')}`;
+      : existing?.id ?? `conn-${Date.now().toString(36)}-${index}-${randomHex(3)}`;
 
   return {
     id,
@@ -138,8 +161,19 @@ function sanitizeConfig(input: Partial<AIConfig>, existing: AIConfig): AIConfig 
 }
 
 function readFileConfig(filePath: string): { config: AIConfig | null; warning?: string } {
+  if (!nodeFs) {
+    try {
+      const raw = typeof localStorage !== 'undefined' ? localStorage.getItem(BROWSER_STORAGE_KEY) : null;
+      if (!raw) return { config: null };
+      const parsed = JSON.parse(raw);
+      const base = sanitizeConfig(parsed, defaultAIConfig());
+      return { config: { ...base, activeId: typeof parsed.activeId === 'string' ? parsed.activeId : base.activeId } };
+    } catch (error: any) {
+      return { config: null, warning: `تنظیمات AI محلی خوانده نشد: ${error?.message ?? error}` };
+    }
+  }
   try {
-    const raw = fs.readFileSync(filePath, 'utf8');
+    const raw = nodeFs.readFileSync(filePath, 'utf8');
     const parsed = JSON.parse(raw);
     const base = sanitizeConfig(parsed, defaultAIConfig());
     // sanitizeConfig با activeId کار می‌کند؛ فایل قدیمی/خراب نباید برنامه را بشکند.
@@ -151,7 +185,10 @@ function readFileConfig(filePath: string): { config: AIConfig | null; warning?: 
 }
 
 /** connectionهای قابل‌استفاده از متغیرهای محیطی (برای اجرای headless / بدون UI). */
-export function envConnections(env: NodeJS.ProcessEnv = process.env): AIConnection[] {
+const defaultEnv = (): NodeJS.ProcessEnv =>
+  typeof process !== 'undefined' && process.env ? process.env : ({} as any);
+
+export function envConnections(env: NodeJS.ProcessEnv = defaultEnv()): AIConnection[] {
   const connections: AIConnection[] = [];
   const seen = new Set<string>();
 
@@ -230,7 +267,7 @@ export function envConnections(env: NodeJS.ProcessEnv = process.env): AIConnecti
   return connections;
 }
 
-export function loadAIConfig(env: NodeJS.ProcessEnv = process.env): LoadedAIConfig {
+export function loadAIConfig(env: NodeJS.ProcessEnv = defaultEnv()): LoadedAIConfig {
   const filePath = aiConfigPath(env);
   const stored = readFileConfig(filePath);
   const envList = envConnections(env);
@@ -295,16 +332,22 @@ export function validateConfigDraft(input: Partial<AIConfig>): string | null {
   return null;
 }
 
-export function saveAIConfig(input: Partial<AIConfig>, env: NodeJS.ProcessEnv = process.env): LoadedAIConfig {
+export function saveAIConfig(input: Partial<AIConfig>, env: NodeJS.ProcessEnv = defaultEnv()): LoadedAIConfig {
   const filePath = aiConfigPath(env);
   const existing = readFileConfig(filePath).config ?? defaultAIConfig();
   const sanitized = sanitizeConfig(input, { ...existing, connections: existing.connections.filter((c) => c.origin !== 'env') });
-  fs.mkdirSync(path.dirname(filePath), { recursive: true, mode: 0o700 });
+  if (!nodeFs || !nodePath) {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem(BROWSER_STORAGE_KEY, JSON.stringify(sanitized));
+    }
+    return loadAIConfig(env);
+  }
+  nodeFs.mkdirSync(nodePath.dirname(filePath), { recursive: true, mode: 0o700 });
   const tempFile = `${filePath}.${process.pid}.tmp`;
-  fs.writeFileSync(tempFile, JSON.stringify(sanitized, null, 2), { mode: 0o600 });
-  fs.renameSync(tempFile, filePath);
+  nodeFs.writeFileSync(tempFile, JSON.stringify(sanitized, null, 2), { mode: 0o600 });
+  nodeFs.renameSync(tempFile, filePath);
   try {
-    fs.chmodSync(filePath, 0o600);
+    nodeFs.chmodSync(filePath, 0o600);
   } catch {
     /* ویندوز chmod ندارد */
   }
@@ -329,7 +372,10 @@ export function publicAIConfig(loaded: LoadedAIConfig) {
     filePath:
       loaded.source === 'file'
         ? (() => {
-            const relative = path.relative(process.cwd(), loaded.filePath);
+            if (!nodePath || typeof process === 'undefined' || typeof process.cwd !== 'function') {
+              return loaded.filePath;
+            }
+            const relative = nodePath.relative(process.cwd(), loaded.filePath);
             return relative && !relative.startsWith('..') ? relative : loaded.filePath;
           })()
         : undefined,
@@ -362,8 +408,12 @@ export function orderedConnections(config: AIConfig): AIConnection[] {
   return [active, ...rest];
 }
 
-export function connectionTarget(connection: AIConnection, config: AIConfig, env: NodeJS.ProcessEnv = process.env): ChatTarget {
+export function connectionTarget(connection: AIConnection, config: AIConfig, env: NodeJS.ProcessEnv = defaultEnv()): ChatTarget {
   const preset = providerPreset(connection.kind);
+  const defaultCacheDir =
+    nodePath && typeof process !== 'undefined' && typeof process.cwd === 'function'
+      ? nodePath.join(process.cwd(), 'data', 'cache', 'llm')
+      : 'browser-cache';
   return {
     id: connection.id,
     kind: connection.kind,
@@ -376,7 +426,7 @@ export function connectionTarget(connection: AIConnection, config: AIConfig, env
     jsonMode: connection.jsonMode && !preset.gateway,
     temperature: config.temperature,
     timeoutMs: config.timeoutMs,
-    cacheDir: env.KONKRED_CACHE_DIR || path.join(process.cwd(), 'data', 'cache', 'llm'),
+    cacheDir: env?.KONKRED_CACHE_DIR || defaultCacheDir,
     cacheTtlMs: config.cacheTtlHours * 3600_000,
   };
 }

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertTriangle,
   CheckCircle2,
@@ -31,6 +31,7 @@ import {
   type AIProfile,
   type AIProviderKind,
 } from '../../shared/aiProviders';
+import { isStandaloneMode } from '../utils/standaloneRuntime';
 import {
   AIRequestError,
   fetchAIModels,
@@ -92,17 +93,41 @@ export const AISettingsPanel: React.FC<AISettingsPanelProps> = ({ onChanged }) =
   const [cardTest, setCardTest] = useState<Record<string, { ok: boolean; message: string; latencyMs?: number }>>({});
   const [expandedHelp, setExpandedHelp] = useState(false);
 
-  const applyLoaded = useCallback(
-    (data: { config: AIConfig; status: AIStatusPayload }) => {
-      setConfig({ ...data.config, profile: { ...emptyProfile, ...(data.config.profile ?? {}) } });
-      setStatus(data.status);
-      onChanged?.(data.status);
-    },
-    [onChanged],
-  );
+  const onChangedRef = useRef(onChanged);
+  useEffect(() => {
+    onChangedRef.current = onChanged;
+  }, [onChanged]);
 
-  const refresh = useCallback(async () => {
-    setLoading(true);
+  const applyLoaded = useCallback((data: { config: AIConfig; status: AIStatusPayload }) => {
+    const normalizedConfig = { ...data.config, profile: { ...emptyProfile, ...(data.config.profile ?? {}) } };
+    setConfig(normalizedConfig);
+    setStatus(data.status);
+    onChangedRef.current?.(data.status);
+    if ((normalizedConfig.connections?.length ?? 0) === 0) {
+      const first = PROVIDER_LIST[0];
+      setEditing((current) =>
+        current ?? {
+          id: '',
+          label: first.label,
+          kind: first.kind,
+          baseUrl: first.baseUrl,
+          apiKey: '',
+          modelFast: '',
+          modelStrong: '',
+          enabled: true,
+          jsonMode: first.jsonMode,
+        },
+      );
+      setIsNew(true);
+    }
+  }, []);
+
+  const refresh = useCallback(async (isInitial = false) => {
+    if (isInitial) {
+      setLoading(true);
+    } else {
+      setBusy('refresh');
+    }
     setLoadError(null);
     try {
       const data = await getAIConfig();
@@ -111,11 +136,12 @@ export const AISettingsPanel: React.FC<AISettingsPanelProps> = ({ onChanged }) =
       setLoadError(error?.message ?? 'بارگذاری تنظیمات AI ناموفق بود.');
     } finally {
       setLoading(false);
+      setBusy((curr) => (curr === 'refresh' ? null : curr));
     }
   }, [applyLoaded]);
 
   useEffect(() => {
-    void refresh();
+    void refresh(true);
   }, [refresh]);
 
   const preset = editing ? providerPreset(editing.kind) : null;
@@ -320,7 +346,7 @@ export const AISettingsPanel: React.FC<AISettingsPanelProps> = ({ onChanged }) =
 
   const skillsText = useMemo(() => (config?.profile.skills ?? []).join('، '), [config?.profile.skills]);
 
-  if (loading) {
+  if (loading && !config) {
     return (
       <div className="flex items-center justify-center gap-2 py-16 text-xs text-slate-400">
         <Loader2 className="h-4 w-4 animate-spin text-emerald-400" />
@@ -428,9 +454,14 @@ export const AISettingsPanel: React.FC<AISettingsPanelProps> = ({ onChanged }) =
         </div>
 
         {config.connections.length === 0 && (
-          <div className="rounded-xl border border-dashed border-slate-800 bg-slate-950/50 p-5 text-center">
-            <p className="text-xs text-slate-400">هنوز هیچ providerی اضافه نشده است.</p>
-            <p className="mt-1 text-[11px] text-slate-500">پیشنهاد سریع: Groq یا Gemini (سهمیه‌ی رایگان) یا Ollama (کاملاً محلی).</p>
+          <div className="rounded-xl border border-dashed border-emerald-500/30 bg-emerald-500/[0.04] p-4">
+            <p className="text-xs font-semibold text-slate-200">برای راه‌اندازی، این ۳ مرحله را انجام دهید:</p>
+            <ol className="mt-2 grid gap-1 text-[11px] leading-5 text-slate-400 sm:grid-cols-3">
+              <li><span className="text-emerald-300">۱.</span> سرویس هوش مصنوعی را انتخاب کنید.</li>
+              <li><span className="text-emerald-300">۲.</span> کلید API همان سرویس را وارد کنید.</li>
+              <li><span className="text-emerald-300">۳.</span> «تست اتصال» و بعد «ذخیره اتصال» را بزنید.</li>
+            </ol>
+            <p className="mt-2 text-[10px] leading-5 text-slate-500">کلید و سهمیه را سرویس‌دهنده‌ی انتخابی تعیین می‌کند؛ برنامه کلید یا پاسخ هوش مصنوعی را جعل نمی‌کند.</p>
           </div>
         )}
 
@@ -499,14 +530,42 @@ export const AISettingsPanel: React.FC<AISettingsPanelProps> = ({ onChanged }) =
 
       {/* Editor */}
       {editing && (
-        <section className="space-y-4 rounded-xl border border-sky-500/25 bg-slate-900/60 p-4">
+        <section className="space-y-4 rounded-xl border border-emerald-500/30 bg-slate-900/80 p-4 shadow-lg shadow-emerald-950/20">
           <div className="flex items-center justify-between">
             <h3 className="flex items-center gap-1.5 text-xs font-bold text-white">
-              <Cpu className="h-3.5 w-3.5 text-sky-400" /> {isNew ? 'افزودن provider' : `ویرایش «${editing.label}»`}
+              <Cpu className="h-3.5 w-3.5 text-emerald-400" /> {isNew ? 'افزودن سریع سرویس هوش مصنوعی (Provider)' : `ویرایش «${editing.label}»`}
             </h3>
             <button onClick={() => setEditing(null)} className="text-[11px] text-slate-400 hover:text-white">
-              بستن
+              بستن فرم
             </button>
+          </div>
+
+          {/* Visual Quick-Select Provider Cards */}
+          <div className="space-y-1.5">
+            <span className="block text-[11px] font-medium text-slate-300">۱. سرویس هوش مصنوعی خود را انتخاب کنید:</span>
+            <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3 md:grid-cols-4">
+              {PROVIDER_LIST.map((item) => {
+                const selected = editing.kind === item.kind;
+                return (
+                  <button
+                    key={item.kind}
+                    type="button"
+                    onClick={() => changeKind(item.kind)}
+                    className={`flex flex-col items-start rounded-lg border px-2.5 py-2 text-right transition-all ${
+                      selected
+                        ? 'border-emerald-500/60 bg-emerald-500/15 text-white shadow-sm'
+                        : 'border-slate-800 bg-slate-950/70 text-slate-300 hover:border-slate-700 hover:bg-slate-900'
+                    }`}
+                  >
+                    <span className="flex w-full items-center justify-between gap-1 text-[11px] font-bold">
+                      <span className="truncate">{item.label.split(' ')[0]}</span>
+                      {selected && <CheckCircle2 className="h-3 w-3 shrink-0 text-emerald-400" />}
+                    </span>
+                    <span className="mt-0.5 line-clamp-1 text-[9.5px] text-slate-400">{item.label}</span>
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -533,7 +592,11 @@ export const AISettingsPanel: React.FC<AISettingsPanelProps> = ({ onChanged }) =
 
             <Field
               label={preset?.requiresKey ? 'کلید API' : 'کلید API (اختیاری)'}
-              hint={editing.hasKey ? 'کلید ذخیره شده است؛ برای تغییر، کلید تازه وارد کنید.' : 'کلید فقط روی همین سرور ذخیره می‌شود و به مرورگر برنمی‌گردد.'}
+              hint={editing.hasKey
+                ? 'کلید ذخیره شده است؛ برای تغییر، کلید تازه وارد کنید.'
+                : isStandaloneMode()
+                  ? 'در نسخه‌ی موبایل، کلید فقط در فضای خصوصی برنامه روی همین دستگاه ذخیره می‌شود.'
+                  : 'کلید در پیکربندی محلی سرور ذخیره می‌شود و به مرورگر برنمی‌گردد.'}
             >
               <div className="relative">
                 <input
@@ -702,9 +765,9 @@ export const AISettingsPanel: React.FC<AISettingsPanelProps> = ({ onChanged }) =
         </button>
         {expandedHelp && (
           <p className="rounded-lg bg-slate-950/60 p-3 text-[10px] leading-relaxed text-slate-400">
-            کلیدها در فایل <span className="font-mono text-slate-300">data/ai-config.json</span> روی همان ماشینی که سرور را اجرا می‌کنید ذخیره
-            می‌شوند (مجوز 0600) و در پاسخ‌های API ماسک می‌شوند. این فایل در <span className="font-mono">.gitignore</span> است.
-            اگر فقط از متغیرهای محیطی استفاده می‌کنید، همان providerها به‌صورت env و فقط‌خواندنی نمایش داده می‌شوند.
+            {isStandaloneMode()
+              ? 'در نسخه‌ی مستقل موبایل، تنظیمات provider و کلید API به‌صورت محلی در فضای خصوصی برنامه روی همین گوشی نگه‌داری می‌شود؛ برای استفاده از سرویس‌های آنلاین، اینترنت و کلید معتبر همان سرویس لازم است.'
+              : <>کلیدها در فایل <span className="font-mono text-slate-300">data/ai-config.json</span> روی همان ماشینی که سرور را اجرا می‌کنید ذخیره می‌شوند (مجوز 0600) و در پاسخ‌های API ماسک می‌شوند. این فایل در <span className="font-mono">.gitignore</span> است. اگر فقط از متغیرهای محیطی استفاده می‌کنید، همان providerها به‌صورت env و فقط‌خواندنی نمایش داده می‌شوند.</>}
           </p>
         )}
       </section>
