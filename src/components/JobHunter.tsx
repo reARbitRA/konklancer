@@ -890,8 +890,20 @@ export const JobHunter: React.FC<JobHunterProps> = ({
           {filtered.length === 0 ? (
             <div className="flex h-full flex-col items-center justify-center gap-2 p-8 text-center">
               <Search className="h-8 w-8 text-slate-700" />
-              <p className="text-sm text-slate-300">پروژه‌ای با این معیارها پیدا نشد.</p>
-              <p className="text-[11px] text-slate-500">عبارت جست‌وجو یا فیلترها را تغییر دهید.</p>
+              {counts.total === 0 ? (
+                <>
+                  <p className="text-sm text-slate-300">فید هنوز خالی است.</p>
+                  <p className="max-w-sm text-[11px] leading-6 text-slate-500">
+                    از نوار بالای همین صفحه «اسکن زنده» را بزنید تا اسکنر واقعی اجرا شود، یا یک پروژه را دستی
+                    اضافه کنید. هیچ داده‌ی نمایشی به‌صورت خودکار وارد فهرست نمی‌شود.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <p className="text-sm text-slate-300">پروژه‌ای با این معیارها پیدا نشد.</p>
+                  <p className="text-[11px] text-slate-500">عبارت جست‌وجو یا فیلترها را تغییر دهید.</p>
+                </>
+              )}
               <div className="mt-2 flex gap-2">
                 {activeFilterCount > 0 && (
                   <button onClick={resetAll} className="btn">
