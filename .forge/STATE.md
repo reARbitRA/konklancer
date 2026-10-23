@@ -21,6 +21,12 @@
 4. T-004 R7: اعلان اختیاری تلگرام برای پروژه‌های بالای آستانه.
 5. T-005: SQLite + `POST /api/bids` + `GET /api/stats` (مبنای قیمت‌گذاری مبتنی بر نتیجه).
 6. کالیبراسیون انتخابگر یک پلتفرم واقعی و ثبت آن در platforms.json.
+## Android APK
+- بیلد خودکار روی push شاخه‌ی `arena/5c65e810-konklancer` (فایل‌های `mobile/**` یا خود workflow).
+- خروجی: prerelease چرخشی `apk-latest` → `konklancer-debug.apk` + artifact هر اجرا.
+- آدرس سرور: `server_url` ورودی → `vars.KONKLANCER_SERVER_URL` → پیش‌فرض (آدرس موقت sandbox).
+- APK فقط WebView است (بدون سرور/اسکنر روی گوشی)؛ جزئیات در `mobile/README-fa.md`.
+
 ## Known issues
 - `npm install` به `--legacy-peer-deps` نیاز دارد؛ `vite.config.ts` از `__dirname` استفاده می‌کند (هشدار Vite).
 - باندل اصلی ~1.1MB است (هشدار حجم چانک)؛ code-split انجام نشده.
