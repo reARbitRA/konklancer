@@ -4,9 +4,31 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
 import { Server as SocketIOServer } from 'socket.io';
-import { callLLM, LLMError, parseJsonLoose, readLLMConfig } from './server/llm';
+import { LLMError } from './server/llm';
 import { checkContent } from './server/contentFilter';
-import { ALL_CATEGORIES, categoryLabel, categoryPromptList } from './shared/taxonomy';
+import { categoryLabel } from './shared/taxonomy';
+import {
+  aiStatus,
+  draftConnection,
+  findConnection,
+  listConnectionModels,
+  loadAIConfig,
+  publicAIConfig,
+  saveAIConfig,
+  testAIConnection,
+  validateConfigDraft,
+} from './server/aiConfig';
+import {
+  analyzeJob,
+  categorizeJobAI,
+  critiqueProposal,
+  generateSolution,
+  publicMeta,
+  writeProposal,
+  writeProposalStream,
+} from './server/aiTasks';
+import { runGeneratedTests } from './server/codeRunner';
+import { listModelsForTarget } from './server/aiEngine';
 import {
   buildFeed,
   categorize,
@@ -320,37 +342,91 @@ if (SCAN_CONFIG.intervalMinutes > 0) {
 
 
 /**
- * دسته‌بندی یک پروژه به یکی از دسته‌های مشترک (shared/taxonomy.json).
- * قبلاً فقط Frontend/Backend/DevOps/Design بود و کارهای ترجمه/گرافیک/صدا دسته‌ی درست نمی‌گرفتند.
+ * دسته‌بندی یک پروژه: اول AI (مدل سریع) و در صورت شکست/نبود AI، قواعد کلیدواژه‌ی مشترک.
+ * این تابع هرگز endpoint را fail نمی‌کند؛ خروجی همیشه یک کلید معتبر از تاکسونومی است.
  */
-async function categorizeJobServer(title: string, description: string): Promise<string> {
+async function categorizeJobServer(title: string, description: string): Promise<{ tag: string; source: 'ai' | 'rules'; confidence: number | null; meta: any }> {
   const fallback = categorize(title, description).key;
-  if (!readLLMConfig()) return fallback;
-  try {
-    const prompt = `دسته‌ی این پروژه‌ی فریلنسری را دقیقاً یکی از دسته‌های زیر انتخاب کن:
-${categoryPromptList()}
-
-عنوان: ${title}
-توضیحات: ${description}
-
-فقط JSON برگردان:
-{"category": "<key>"}`;
-    const llm = await callLLM({ taskType: 'extraction', prompt, json: true, maxTokens: 64, temperature: 0 });
-    const parsed = parseJsonLoose(llm.text) ?? {};
-    const valid = ALL_CATEGORIES.map((category) => category.key);
-    return valid.includes(parsed.category) ? (parsed.category as string) : fallback;
-  } catch (err: any) {
-    console.warn('AI categorization unavailable, using keyword rules:', err?.message ?? err);
-    return fallback;
+  const loaded = loadAIConfig();
+  if (!aiStatus(loaded).configured) return { tag: fallback, source: 'rules', confidence: null, meta: null };
+  const ai = await categorizeJobAI(loaded, { title, description });
+  if (ai.category) {
+    return { tag: ai.category, source: 'ai', confidence: ai.confidence, meta: ai.meta ? publicMeta(ai.meta) : null };
   }
+  return { tag: fallback, source: 'rules', confidence: null, meta: null };
 }
 
-// Uniform error mapping for AI endpoints (SPEC-006 R5, R10).
+// Uniform error mapping for AI endpoints (SPEC-006 R5/R10, SPEC-008).
 function sendLLMError(res: Response, err: unknown, fallbackMessage: string) {
   if (err instanceof LLMError) {
-    return res.status(err.status).json({ success: false, aiAvailable: false, code: err.code, error: err.message });
+    return res.status(err.status || 502).json({
+      success: false,
+      aiAvailable: false,
+      code: err.code,
+      error: err.message,
+      detail: err.detail ?? null,
+      retryAfterSec: err.retryAfterSec ?? null,
+      // UI با این پرچم دکمه‌ی «تنظیمات AI» را نشان می‌دهد.
+      requiresAIConfig: ['AI_NOT_CONFIGURED', 'AI_AUTH', 'AI_MODEL_NOT_FOUND', 'AI_MODEL_NOT_CONFIGURED'].includes(err.code),
+    });
   }
   return res.status(500).json({ success: false, aiAvailable: false, code: 'AI_UPSTREAM', error: fallbackMessage });
+}
+
+/* ------------------------- SSE helpers (SPEC-008) ------------------------- */
+
+function sseStart(res: Response) {
+  res.status(200);
+  res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
+  res.setHeader('Cache-Control', 'no-cache, no-transform');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
+  res.flushHeaders?.();
+  res.socket?.setNoDelay?.(true);
+}
+
+function sseSend(res: Response, event: string, data: unknown) {
+  if (res.writableEnded || res.destroyed) return;
+  res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+}
+
+function sseError(res: Response, err: unknown) {
+  if (err instanceof LLMError) {
+    sseSend(res, 'error', {
+      success: false,
+      aiAvailable: false,
+      code: err.code,
+      error: err.message,
+      detail: err.detail ?? null,
+      retryAfterSec: err.retryAfterSec ?? null,
+      requiresAIConfig: ['AI_NOT_CONFIGURED', 'AI_AUTH', 'AI_MODEL_NOT_FOUND', 'AI_MODEL_NOT_CONFIGURED'].includes(err.code),
+    });
+    return;
+  }
+  sseSend(res, 'error', { success: false, aiAvailable: false, code: 'AI_UPSTREAM', error: (err as Error)?.message ?? 'خطای نامشخص' });
+}
+
+/** connection ذخیره‌شده یا پیش‌نویس فرم را برمی‌گرداند (برای تست/دریافت مدل قبل از ذخیره). */
+function resolveConnectionFromBody(loaded: ReturnType<typeof loadAIConfig>, body: any) {
+  const stored = body?.connectionId ? findConnection(loaded.config, String(body.connectionId)) : null;
+  const draft = body?.connection && typeof body.connection === 'object' ? draftConnection(body.connection, stored ?? undefined) : null;
+  return draft ?? stored;
+}
+
+/** فیلدهای مشترک پروژه را از بدنه‌ی درخواست می‌سازد. */
+function jobFromBody(body: any) {
+  return {
+    title: String(body?.title ?? '').trim(),
+    description: String(body?.description ?? ''),
+    budget: Number(body?.budget) > 0 ? Number(body.budget) : null,
+    budgetFormatted: body?.budgetFormatted ? String(body.budgetFormatted) : undefined,
+    platform: body?.platform ? String(body.platform) : undefined,
+    proposalsCount: Number.isFinite(Number(body?.proposalsCount)) ? Number(body.proposalsCount) : null,
+    deadline: body?.deadline ? String(body.deadline) : undefined,
+    postedTime: body?.postedTime ? String(body.postedTime) : undefined,
+    category: body?.category ? String(body.category) : undefined,
+    url: body?.url ? String(body.url) : undefined,
+  };
 }
 
 async function broadcastNewJob(customPayload?: any) {
@@ -544,12 +620,100 @@ app.post('/api/bridge/cloud-scan', async (req: Request, res: Response) => {
   }
 });
 
+/* ===================================================================== */
+/* SPEC-008 — تنظیمات و سلامت هوش مصنوعی                                  */
+/* ===================================================================== */
+
+// وضعیت خلاصه: آیا AI آماده است، کدام provider فعال است، و چند اتصال سالم وجود دارد.
+app.get('/api/ai/status', (_req: Request, res: Response) => {
+  const loaded = loadAIConfig();
+  res.json({ success: true, ...aiStatus(loaded) });
+});
+
+// تنظیمات کامل با کلیدهای ماسک‌شده (کلید واقعی هرگز به مرورگر برنمی‌گردد).
+app.get('/api/ai/config', (_req: Request, res: Response) => {
+  const loaded = loadAIConfig();
+  res.json({ success: true, config: publicAIConfig(loaded), status: aiStatus(loaded) });
+});
+
+// ذخیره‌ی تنظیمات از UI (provider، مدل‌ها، پروفایل، رفتار).
+app.put('/api/ai/config', (req: Request, res: Response) => {
+  try {
+    if (!req.body || typeof req.body !== 'object') {
+      return res.status(400).json({ success: false, code: 'AI_BAD_REQUEST', error: 'بدنه‌ی تنظیمات نامعتبر است.' });
+    }
+    const invalid = validateConfigDraft(req.body);
+    if (invalid) {
+      return res.status(400).json({ success: false, code: 'AI_CONFIG_INVALID', error: invalid, requiresAIConfig: true });
+    }
+    const loaded = saveAIConfig(req.body);
+    const status = aiStatus(loaded);
+    console.log(`[ai] تنظیمات ذخیره شد · provider فعال: ${status.provider?.label ?? '—'} · اتصال‌های سالم: ${status.usableConnections}`);
+    return res.json({ success: true, config: publicAIConfig(loaded), status });
+  } catch (error: any) {
+    return res.status(500).json({ success: false, code: 'AI_CONFIG_WRITE_FAILED', error: `ذخیره‌ی تنظیمات ناموفق بود: ${error?.message ?? error}` });
+  }
+});
+
+// فهرست مدل‌های provider؛ هم برای connection ذخیره‌شده و هم برای فرم ذخیره‌نشده.
+app.post('/api/ai/models', async (req: Request, res: Response) => {
+  const loaded = loadAIConfig();
+  const connection = resolveConnectionFromBody(loaded, req.body);
+  if (!connection) {
+    return res.status(400).json({ success: false, code: 'AI_NOT_CONFIGURED', error: 'ابتدا provider، آدرس پایه و کلید را وارد کنید.' });
+  }
+  try {
+    const result = await listConnectionModels(connection);
+    return res.json({ success: true, count: result.models.length, models: result.models, recommended: result.recommended });
+  } catch (error) {
+    return sendLLMError(res, error, 'دریافت فهرست مدل‌ها ناموفق بود.');
+  }
+});
+
+// تست واقعی اتصال با یک درخواست کوچک.
+app.post('/api/ai/test', async (req: Request, res: Response) => {
+  const loaded = loadAIConfig();
+  const connection = resolveConnectionFromBody(loaded, req.body);
+  if (!connection) {
+    return res.status(400).json({ success: false, ok: false, code: 'AI_NOT_CONFIGURED', error: 'هیچ اتصالی برای تست وجود ندارد.' });
+  }
+  const result = await testAIConnection(connection, loaded.config);
+  const lastTest = {
+    ok: result.ok,
+    at: new Date().toISOString(),
+    latencyMs: result.latencyMs,
+    model: result.model,
+    message: result.message,
+  };
+  if (connection.origin !== 'env' && loaded.config.connections.some((item) => item.id === connection.id)) {
+    try {
+      saveAIConfig({
+        ...loaded.config,
+        connections: loaded.config.connections.map((item) => (item.id === connection.id ? { ...item, lastTest } : item)),
+      });
+    } catch {
+      /* تست موفق است حتی اگر ذخیره نشود */
+    }
+  }
+  return res.status(result.ok ? 200 : 502).json({ success: result.ok, ...result, lastTest });
+});
+
 // Endpoint: دسته‌بندی پروژه با دسته‌های مشترک (shared/taxonomy.json)
 app.post('/api/categorize-job', async (req: Request, res: Response) => {
   try {
-    const { title = '', description = '' } = req.body;
-    const tag = await categorizeJobServer(title, description);
-    res.json({ success: true, tag });
+    const title = String(req.body?.title ?? '');
+    const description = String(req.body?.description ?? '');
+    if (!title && !description) {
+      return res.status(400).json({ success: false, error: 'عنوان یا توضیحات پروژه لازم است.' });
+    }
+    const result = await categorizeJobServer(title, description);
+    return res.json({
+      success: true,
+      tag: result.tag,
+      source: result.source,
+      confidence: result.confidence,
+      meta: result.meta,
+    });
   } catch (error: any) {
     console.error('Error in categorize-job:', error);
     return sendLLMError(res, error, 'Failed to categorize job');
@@ -622,170 +786,274 @@ app.get('/api/bridge/status', (_req: Request, res: Response) => {
   });
 });
 
-// Endpoint: AI Analysis using Gemini 3.8 Flash
+/* ===================================================================== */
+/* SPEC-008 — امکانات هوش مصنوعی (تحلیل، پروپوزال، نقد، کد، اجرای تست)   */
+/* ===================================================================== */
+
+// Endpoint: تحلیل پروژه (JSON ساختاریافته + متادیتای مدل/زمان/تلاش)
 app.post('/api/analyze-job', async (req: Request, res: Response) => {
   try {
-    const { title, description, budget, platform } = req.body;
-    const check = checkContent(title, description);
+    const job = jobFromBody(req.body);
+    const check = checkContent(job.title, job.description);
     if (check.blocked) {
       return res.status(422).json({ blocked: true, error: check.reason, reason: check.reason });
     }
-
-    if (!title || !description) {
-      return res.status(400).json({ error: 'Job title and description are required' });
+    if (!job.title) {
+      return res.status(400).json({ success: false, code: 'AI_BAD_REQUEST', error: 'عنوان پروژه لازم است.' });
+    }
+    if (!job.description.trim()) {
+      return res.status(400).json({
+        success: false,
+        code: 'AI_BAD_REQUEST',
+        error: 'برای تحلیل دقیق، متن توضیحات پروژه لازم است. متن کامل آگهی را وارد کنید.',
+      });
     }
 
-    if (!readLLMConfig()) return sendLLMError(res, new LLMError('AI_NOT_CONFIGURED', 'KONKRED_GATEWAY_URL و KONKRED_API_KEY تنظیم نشده‌اند.', 503), 'AI not configured');
-
-    const prompt = `شما معمار ارشد سیستم‌های اتوماسیون هوش مصنوعی فریلنسری هستید.
-پروژه فریلنسری زیر از پلتفرم "${platform || 'فریلنسری'}" را تحلیل فنی و اقتصادی کنید:
-عنوان: ${title}
-توضیحات: ${description}
-بودجه کارفرما: ${budget || 'نامشخص'}
-
-وظیفه شما ارزیابی دقیق است. خروجی را دقیقاً در قالب فرمت JSON معتبر زیر بازگردانید:
-{
-  "automatabilityScore": 95,
-  "recommendedBid": 2800000,
-  "suggestedDuration": "۴ ساعت",
-  "technicalStack": ["Python", "Playwright"],
-  "feasibilityReason": "توضیح تحلیلی ۲ خطی به زبان فارسی درباره چرایی امکان اجرای ۱۰۰٪ خودکار توسط ایجنت هوش مصنوعی",
-  "riskLevel": "low",
-  "winProbability": "۸۵٪",
-  "suggestedKicker": "نکته کلیدی که باید در خط اول پیشنهاد به آن اشاره شود تا کارفرما متوجه شود پروژه دقیق خوانده شده است"
-}`;
-
-    const llm = await callLLM({ taskType: 'general', prompt, json: true, cacheKey: `analyze:${platform}|${title}|${description}|${budget}` });
-    const parsed = parseJsonLoose(llm.text) ?? {};
-    const recommendedBid = parsed.recommendedBid || (budget ? Math.round(budget * 0.85) : 3000000);
+    const loaded = loadAIConfig();
+    const result = await analyzeJob(loaded, job);
+    const analysis = result.analysis;
+    const recommendedBid = analysis.recommendedBid;
 
     return res.json({
       success: true,
       aiAvailable: true,
-      model: llm.model,
-      automatabilityScore: parsed.automatabilityScore || 92,
-      recommendedBid,
-      recommendedBidFormatted: recommendedBid.toLocaleString('fa-IR') + ' تومان',
-      suggestedDuration: parsed.suggestedDuration || '۴ ساعت',
-      technicalStack: parsed.technicalStack || ['Python', 'Asyncio'],
-      feasibilityReason: parsed.feasibilityReason || 'پروژه دیجیتال و الگوریتمی بوده و قابلیت پیاده‌سازی سریع با ایجنت را دارد.',
-      riskLevel: parsed.riskLevel || 'low',
-      winProbability: parsed.winProbability || '۸۵٪',
-      suggestedKicker: parsed.suggestedKicker || 'اشاره به استراتژی حل سریع مسئله'
+      model: result.meta.model,
+      provider: result.meta.provider,
+      meta: publicMeta(result.meta),
+      // فیلدهای تخت برای سازگاری با نسخه‌ی قبلی UI
+      ...analysis,
+      recommendedBidFormatted: recommendedBid ? `${recommendedBid.toLocaleString('fa-IR')} تومان` : null,
+      analysis,
+      partial: result.partial,
+      warnings: result.warnings,
     });
   } catch (error: any) {
-    console.error('Error in analyze-job:', error);
-    return sendLLMError(res, error, 'Failed to analyze job');
+    console.error('Error in analyze-job:', error?.code ?? error?.message ?? error);
+    return sendLLMError(res, error, 'تحلیل پروژه ناموفق بود.');
   }
 });
 
-// Endpoint: Generate authentic Persian proposal tailored to employer
+// Endpoint: نگارش پروپوزال (غیراستریم — سازگار با کلاینت‌های قبلی)
 app.post('/api/generate-proposal', async (req: Request, res: Response) => {
   try {
-    const { title, description, budget, tone = 'friendly_expert' } = req.body;
-    const check = checkContent(title, description);
+    const job = jobFromBody(req.body);
+    const check = checkContent(job.title, job.description);
     if (check.blocked) {
       return res.status(422).json({ blocked: true, error: check.reason, reason: check.reason });
     }
-
-    if (!title || !description) {
-      return res.status(400).json({ error: 'Job title and description are required' });
+    if (!job.title) {
+      return res.status(400).json({ success: false, code: 'AI_BAD_REQUEST', error: 'عنوان پروژه لازم است.' });
     }
 
-    const targetPrice = budget ? Math.round(budget * 0.82) : 2500000;
+    const requestedPrice = Number(req.body?.price) > 0 ? Number(req.body.price) : null;
+    const fallbackPrice = job.budget && job.budget > 0 ? Math.round(job.budget * 0.85) : null;
+    const price = requestedPrice ?? fallbackPrice;
+    const deliveryTime = String(req.body?.deliveryTime ?? '۴۸ ساعت');
 
-    if (!readLLMConfig()) return sendLLMError(res, new LLMError('AI_NOT_CONFIGURED', 'KONKRED_GATEWAY_URL و KONKRED_API_KEY تنظیم نشده‌اند.', 503), 'AI not configured');
-
-    const toneInstructionsMap: Record<string, string> = {
-      friendly_expert: 'لحن: یک مهندس نرم‌افزار حرفه‌ای، صمیمی، خاکی و قابل اعتماد.',
-      direct_urgent: 'لحن: صریح، بسیار متمرکز بر زمان تحویل فوری زیر چند ساعت.',
-      technical_detailed: 'لحن: فنی و آگاه به جزییات کتابخانه‌ها و معماری اجرای بدون باگ.'
-    };
-    const toneInstructions = toneInstructionsMap[String(tone)] || 'لحن: حرفه‌ای و صمیمی';
-
-    const prompt = `شما یک برنامه‌نویس ارشد ایرانی در بازار فریلنسری هستید.
-می‌خواهید برای پروژه زیر یک پروپوزال (پیشنهاد) بسیار متقاعدکننده بنویسید که کارفرما بلافاصله پیام دهد.
-عنوان پروژه: ${title}
-توضیحات پروژه: ${description}
-بودجه کارفرما: ${budget || 'متغیر'}
-${toneInstructions}
-
-قوانین سخت‌گیرانه:
-۱. اصلاً نباید شبیه متون تکراری یا هوش مصنوعی باشد. واژه‌های کلیشه‌ای مثل "با کمال میل"، "تضمین ۱۰۰٪"، "در اسرع وقت" را هرگز به کار نبرید.
-۲. طول متن: حداکثر ۳ الی ۴ جمله.
-۳. در جمله اول دقیقاً به یکی از چالش‌ها یا بخش‌های خاص خواسته کارفرما اشاره کنید تا ثابت شود متن را با دقت خوانده‌اید.
-۴. ذکر کنید که کدها تست‌شده با راهنمای اجرای فارسی روی گیت‌هاب تحویل خواهد شد.
-
-خروجی را در قالب JSON زیر تحویل دهید:
-{
-  "proposal": "متن فارسی پروپوزال",
-  "proposedPrice": ${targetPrice},
-  "deliveryTime": "۴ ساعت"
-}`;
-
-    const llm = await callLLM({ taskType: 'general', prompt, json: true });
-    const parsed = parseJsonLoose(llm.text) ?? {};
+    const loaded = loadAIConfig();
+    const result = await writeProposal(loaded, {
+      ...job,
+      tone: req.body?.tone,
+      price,
+      deliveryTime,
+      extraNotes: req.body?.extraNotes,
+    });
 
     return res.json({
       success: true,
       aiAvailable: true,
-      model: llm.model,
-      proposal: parsed.proposal,
-      proposedPrice: parsed.proposedPrice || targetPrice,
-      proposedPriceFormatted: (parsed.proposedPrice || targetPrice).toLocaleString('fa-IR') + ' تومان',
-      deliveryTime: parsed.deliveryTime || '۴ ساعت',
+      model: result.meta.model,
+      provider: result.meta.provider,
+      meta: publicMeta(result.meta),
+      proposal: result.proposal,
+      proposedPrice: price,
+      proposedPriceFormatted: price ? `${price.toLocaleString('fa-IR')} تومان` : null,
+      deliveryTime,
     });
   } catch (error: any) {
-    console.error('Error in generate-proposal:', error);
-    return sendLLMError(res, error, 'Failed to generate proposal');
+    console.error('Error in generate-proposal:', error?.code ?? error?.message ?? error);
+    return sendLLMError(res, error, 'نگارش پروپوزال ناموفق بود.');
   }
 });
 
-// Endpoint: Autonomous Code Solution Generator
+// Endpoint: نگارش پروپوزال با استریم واقعی (SSE) — متن همان‌طور که مدل می‌نویسد می‌رسد.
+app.post('/api/generate-proposal/stream', async (req: Request, res: Response) => {
+  const job = jobFromBody(req.body);
+  const check = checkContent(job.title, job.description);
+  if (check.blocked) {
+    return res.status(422).json({ blocked: true, error: check.reason, reason: check.reason });
+  }
+  if (!job.title || !job.description.trim()) {
+    return res.status(400).json({ success: false, code: 'AI_BAD_REQUEST', error: 'عنوان و توضیحات پروژه لازم است.' });
+  }
+
+  sseStart(res);
+  const controller = new AbortController();
+  let finished = false;
+  res.on('close', () => {
+    if (!finished) controller.abort();
+  });
+
+  try {
+    const requestedPrice = Number(req.body?.price) > 0 ? Number(req.body.price) : null;
+    const fallbackPrice = job.budget && job.budget > 0 ? Math.round(job.budget * 0.85) : null;
+    const price = requestedPrice ?? fallbackPrice;
+    const deliveryTime = String(req.body?.deliveryTime ?? '۴۸ ساعت');
+    sseSend(res, 'start', { success: true, price, deliveryTime });
+
+    const loaded = loadAIConfig();
+    const result = await writeProposalStream(
+      loaded,
+      { ...job, tone: req.body?.tone, price, deliveryTime, extraNotes: req.body?.extraNotes },
+      (delta) => sseSend(res, 'delta', { text: delta }),
+      controller.signal,
+    );
+    sseSend(res, 'done', {
+      success: true,
+      aiAvailable: true,
+      proposal: result.text,
+      proposedPrice: price,
+      proposedPriceFormatted: price ? `${price.toLocaleString('fa-IR')} تومان` : null,
+      deliveryTime,
+      meta: publicMeta(result.meta),
+    });
+  } catch (error: any) {
+    if (!controller.signal.aborted) sseError(res, error);
+  } finally {
+    finished = true;
+    if (!res.writableEnded) res.end();
+  }
+});
+
+// Endpoint: نقد و امتیاز پروپوزال (کارفرمای سخت‌گیر شبیه‌سازی‌شده)
+app.post('/api/critique-proposal', async (req: Request, res: Response) => {
+  try {
+    const proposal = String(req.body?.proposal ?? '').trim();
+    if (!proposal) {
+      return res.status(400).json({ success: false, code: 'AI_BAD_REQUEST', error: 'متن پروپوزال خالی است.' });
+    }
+    const job = jobFromBody(req.body?.job ?? req.body);
+    const loaded = loadAIConfig();
+    const result = await critiqueProposal(loaded, { proposal, job });
+    return res.json({
+      success: true,
+      aiAvailable: true,
+      critique: result.critique,
+      meta: publicMeta(result.meta),
+    });
+  } catch (error: any) {
+    console.error('Error in critique-proposal:', error?.code ?? error?.message ?? error);
+    return sendLLMError(res, error, 'نقد پروپوزال ناموفق بود.');
+  }
+});
+
+// Endpoint: تولید پروژه‌ی چندفایلی (غیراستریم)
 app.post('/api/generate-solution', async (req: Request, res: Response) => {
   try {
-    const { title, description } = req.body;
-    const check = checkContent(title, description);
+    const job = jobFromBody(req.body);
+    const check = checkContent(job.title, job.description);
     if (check.blocked) {
       return res.status(422).json({ blocked: true, error: check.reason, reason: check.reason });
     }
-
-    if (!title) {
-      return res.status(400).json({ error: 'Job title is required' });
+    if (!job.title) {
+      return res.status(400).json({ success: false, code: 'AI_BAD_REQUEST', error: 'عنوان پروژه لازم است.' });
     }
 
-    if (!readLLMConfig()) return sendLLMError(res, new LLMError('AI_NOT_CONFIGURED', 'KONKRED_GATEWAY_URL و KONKRED_API_KEY تنظیم نشده‌اند.', 503), 'AI not configured');
-
-    const prompt = `شما یک مهندس نرم‌افزار ارشد و ایجنت کدنویسی خودکار هستید.
-برای این پروژه فریلنسری:
-عنوان: ${title}
-توضیحات: ${description}
-
-وظیفه شما تولید یک پروژه کامل، بدون نقص، کامپایل‌پذیر و آماده تحویل است.
-کدها باید دارای لاگین تمیز، ترای/اکسپت کامل و داکیومنت فارسی برای کارفرما باشد.
-
-خروجی را حتماً در قالب یک JSON معتبر برگردانید که کلیدهای آن نام فایل‌ها و مقادیر آن سورس کامل فایل باشد:
-{
-  "files": {
-    "main.py": "سورس کامل کد اصلی پایتون با همه توابع واقعی",
-    "requirements.txt": "لیست کتابخانه‌های مورد نیاز",
-    "README.md": "راهنمای کامل و گام‌به‌گام فارسی برای کارفرما جهت نحوه نصب و اجرای پروژه",
-    "test_suite.py": "تست‌های اعتبارسنجی با unittest"
-  }
-}`;
-
-    const llm = await callLLM({ taskType: 'code-generation', prompt, json: true, maxTokens: 8000 });
-    const parsed = parseJsonLoose(llm.text) ?? {};
+    const loaded = loadAIConfig();
+    const result = await generateSolution(loaded, {
+      ...job,
+      instructions: req.body?.instructions ? String(req.body.instructions) : undefined,
+      language: req.body?.language ? String(req.body.language) : undefined,
+    });
 
     return res.json({
       success: true,
       aiAvailable: true,
-      model: llm.model,
-      files: parsed.files || {}
+      files: result.files,
+      plan: result.plan,
+      warnings: result.warnings,
+      model: result.meta.model,
+      provider: result.meta.provider,
+      meta: publicMeta(result.meta),
     });
   } catch (error: any) {
-    console.error('Error in generate-solution:', error);
-    return sendLLMError(res, error, 'Failed to generate solution');
+    console.error('Error in generate-solution:', error?.code ?? error?.message ?? error);
+    return sendLLMError(res, error, 'تولید سورس کد ناموفق بود.');
+  }
+});
+
+// Endpoint: تولید پروژه با پیشرفت زنده (نقشه → فایل‌به‌فایل)
+app.post('/api/generate-solution/stream', async (req: Request, res: Response) => {
+  const job = jobFromBody(req.body);
+  const check = checkContent(job.title, job.description);
+  if (check.blocked) {
+    return res.status(422).json({ blocked: true, error: check.reason, reason: check.reason });
+  }
+  if (!job.title) {
+    return res.status(400).json({ success: false, code: 'AI_BAD_REQUEST', error: 'عنوان پروژه لازم است.' });
+  }
+
+  sseStart(res);
+  const controller = new AbortController();
+  let finished = false;
+  res.on('close', () => {
+    if (!finished) controller.abort();
+  });
+
+  try {
+    sseSend(res, 'start', { success: true, message: 'شروع تولید پروژه…' });
+    const loaded = loadAIConfig();
+    const result = await generateSolution(
+      loaded,
+      {
+        ...job,
+        instructions: req.body?.instructions ? String(req.body.instructions) : undefined,
+        language: req.body?.language ? String(req.body.language) : undefined,
+      },
+      {
+        signal: controller.signal,
+        onProgress: (event) => sseSend(res, 'progress', event),
+      },
+    );
+    sseSend(res, 'done', {
+      success: true,
+      aiAvailable: true,
+      files: result.files,
+      plan: result.plan,
+      warnings: result.warnings,
+      meta: publicMeta(result.meta),
+    });
+  } catch (error: any) {
+    if (!controller.signal.aborted) sseError(res, error);
+  } finally {
+    finished = true;
+    if (!res.writableEnded) res.end();
+  }
+});
+
+// Endpoint: اجرای واقعی تست‌های کد تولیدشده (فقط اگر کاربر در تنظیمات اجازه داده باشد)
+app.post('/api/run-tests', async (req: Request, res: Response) => {
+  const loaded = loadAIConfig();
+  if (!loaded.config.allowCodeExecution) {
+    return res.status(403).json({
+      success: false,
+      ok: false,
+      code: 'CODE_EXECUTION_DISABLED',
+      error: 'اجرای کد در تنظیمات خاموش است. برای فعال‌کردن: تنظیمات → هوش مصنوعی → «اجرای تست کد تولیدشده».',
+      requiresAIConfig: false,
+    });
+  }
+  const files = req.body?.files;
+  if (!files || typeof files !== 'object') {
+    return res.status(400).json({ success: false, ok: false, code: 'AI_BAD_REQUEST', error: 'فایل‌های پروژه لازم است.' });
+  }
+  try {
+    const result = await runGeneratedTests(files as Record<string, string>, {
+      timeoutMs: Number(req.body?.timeoutMs) || undefined,
+    });
+    return res.json({ success: result.ok, ...result });
+  } catch (error: any) {
+    return res.status(500).json({ success: false, ok: false, code: 'CODE_RUN_FAILED', error: error?.message ?? 'اجرای تست ناموفق بود.' });
   }
 });
 
@@ -813,7 +1081,18 @@ async function startServer() {
     });
   }
 
-  if (!readLLMConfig()) console.warn('[llm] KONKRED_GATEWAY_URL / KONKRED_API_KEY not set: AI endpoints return 503 AI_NOT_CONFIGURED');
+  const aiLoaded = loadAIConfig();
+  const ai = aiStatus(aiLoaded);
+  if (!ai.configured) {
+    console.warn(
+      '[ai] هیچ اتصال هوش مصنوعی تنظیم نشده است. از UI «تنظیمات → هوش مصنوعی» یک provider و کلید اضافه کنید، ' +
+        'یا OPENAI_API_KEY / GROQ_API_KEY / GEMINI_API_KEY / KONKRED_GATEWAY_URL را در .env بگذارید.',
+    );
+  } else {
+    console.log(
+      `[ai] آماده · ${ai.provider?.label} · مدل fast: ${ai.provider?.modelFast ?? 'خودکار'} · strong: ${ai.provider?.modelStrong ?? 'خودکار'} · fallback: ${ai.fallbackEnabled ? 'روشن' : 'خاموش'}`,
+    );
+  }
 
   // وضعیت اسکنر را در همان لحظه‌ی راه‌اندازی گزارش می‌دهیم تا برای استفاده‌ی شخصی معلوم باشد
   // چه چیزی اسکن می‌شود و فید از کجاست (SPEC-004).

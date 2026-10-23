@@ -46,14 +46,30 @@ export interface FreelanceJob {
 
 export interface AIAnalysis {
   automatabilityScore: number;
-  recommendedBid: number;
-  recommendedBidFormatted: string;
-  suggestedDuration: string;
+  recommendedBid: number | null;
+  recommendedBidFormatted: string | null;
+  suggestedDuration?: string | null;
   technicalStack: string[];
   feasibilityReason: string;
-  riskLevel: 'low' | 'medium' | 'high';
-  winProbability: string;
-  suggestedKicker: string;
+  riskLevel?: 'low' | 'medium' | 'high' | null;
+  winProbability?: string | null;
+  suggestedKicker?: string | null;
+  // SPEC-008: فیلدهای شخصی‌سازی‌شده
+  matchScore?: number | null;
+  matchReason?: string | null;
+  redFlags?: string[];
+  nextSteps?: string[];
+  caveats?: string[];
+  warnings?: string[];
+  partial?: boolean;
+  meta?: {
+    model?: string;
+    provider?: string;
+    cached?: boolean;
+    latencyMs?: number;
+    streamed?: boolean;
+    usage?: { promptTokens?: number; completionTokens?: number; totalTokens?: number } | null;
+  } | null;
 }
 
 export interface ProposalResult {

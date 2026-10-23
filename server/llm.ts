@@ -1,29 +1,25 @@
-// SPEC-006: every LLM call goes through the Konkred gateway (OpenAI-compatible
-// /v1/chat/completions). Konklancer holds one gateway key and no provider keys.
-import { createHash } from 'crypto';
-import fs from 'fs';
+/**
+ * SPEC-006 — کلاینت گیت‌وی کانکرد (سازگاری کامل با نسخه‌ی قبلی).
+ *
+ * از SPEC-008 به بعد، موتور مشترک در `server/aiEngine.ts` است و این فایل فقط یک
+ * آداپتور برای مسیر گیت‌وی و API قدیمی `callLLM` است تا کدها/تست‌های قبلی
+ * بدون تغییر کار کنند.
+ */
 import path from 'path';
+import {
+  chat,
+  LLMError,
+  parseJsonLoose,
+  isMockModel,
+  type ChatMessage,
+  type ChatTarget,
+  type TaskType,
+} from './aiEngine';
 
-export type TaskType = 'general' | 'extraction' | 'summarization' | 'code-generation';
+export { LLMError, parseJsonLoose, isMockModel };
+export type { TaskType };
 
-export type LLMErrorCode =
-  | 'AI_NOT_CONFIGURED'
-  | 'AI_UNAVAILABLE'
-  | 'AI_AUTH'
-  | 'AI_RATE_LIMITED'
-  | 'AI_UPSTREAM'
-  | 'AI_BAD_RESPONSE';
-
-export class LLMError extends Error {
-  code: LLMErrorCode;
-  status: number;
-  constructor(code: LLMErrorCode, message: string, status: number) {
-    super(message);
-    this.name = 'LLMError';
-    this.code = code;
-    this.status = status;
-  }
-}
+export type LLMErrorCode = import('./aiEngine').LLMErrorCode;
 
 export interface LLMConfig {
   gatewayUrl: string;
@@ -66,36 +62,21 @@ export function readLLMConfig(env: NodeJS.ProcessEnv = process.env): LLMConfig |
   };
 }
 
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-const sha256 = (s: string) => createHash('sha256').update(s).digest('hex');
-
-/** A mock/simulator model means no live provider capacity. Never treat it as real output. */
-export const isMockModel = (model: string) => model.trim().toLowerCase().startsWith('mock');
-
-function retryDelayMs(res: Response): number {
-  const header = res.headers.get('retry-after');
-  const seconds = header !== null ? Number(header) : NaN;
-  const ms = Number.isFinite(seconds) ? seconds * 1000 : 5000;
-  return Math.min(60_000, Math.max(0, ms));
-}
-
-function readCache(file: string, ttlMs: number): LLMResult | null {
-  try {
-    const st = fs.statSync(file);
-    if (Date.now() - st.mtimeMs > ttlMs) return null;
-    return JSON.parse(fs.readFileSync(file, 'utf8')) as LLMResult;
-  } catch {
-    return null;
-  }
-}
-
-function writeCache(file: string, value: LLMResult) {
-  try {
-    fs.mkdirSync(path.dirname(file), { recursive: true });
-    fs.writeFileSync(file, JSON.stringify(value));
-  } catch (err) {
-    console.warn('[llm] cache write failed:', (err as Error).message);
-  }
+export function gatewayTarget(cfg: LLMConfig): ChatTarget {
+  return {
+    id: 'env-gateway',
+    kind: 'gateway',
+    label: 'Konkred Gateway',
+    baseUrl: cfg.gatewayUrl,
+    apiKey: cfg.apiKey,
+    gateway: true,
+    privacy: cfg.privacy,
+    models: { fast: '', strong: '' },
+    jsonMode: false,
+    timeoutMs: cfg.timeoutMs,
+    cacheDir: cfg.cacheDir,
+    cacheTtlMs: cfg.cacheTtlMs,
+  };
 }
 
 export async function callLLM(
@@ -106,96 +87,27 @@ export async function callLLM(
   if (!cfg) {
     throw new LLMError('AI_NOT_CONFIGURED', 'KONKRED_GATEWAY_URL و KONKRED_API_KEY تنظیم نشده‌اند.', 503);
   }
-
-  const cacheFile = req.cacheKey ? path.join(cfg.cacheDir, `${sha256(req.cacheKey)}.json`) : null;
-  if (cacheFile) {
-    const hit = readCache(cacheFile, cfg.cacheTtlMs);
-    if (hit) return { ...hit, cached: true };
-  }
-
-  const messages: { role: string; content: string }[] = [];
+  const messages: ChatMessage[] = [];
   if (req.system) messages.push({ role: 'system', content: req.system });
   messages.push({ role: 'user', content: req.prompt });
 
-  const body = JSON.stringify({
-    taskType: req.taskType,
-    messages,
-    max_tokens: req.maxTokens ?? 2048,
-    temperature: req.temperature ?? 0.4,
-    privacy: cfg.privacy,
-  });
+  const result = await chat(
+    {
+      messages,
+      taskType: req.taskType,
+      modelTier: 'strong',
+      maxTokens: req.maxTokens,
+      temperature: req.temperature,
+      json: req.json,
+      cacheKey: req.cacheKey,
+    },
+    { ...gatewayTarget(cfg), fetchImpl },
+  );
 
-  const url = `${cfg.gatewayUrl}/v1/chat/completions`;
-  const headers = { 'content-type': 'application/json', authorization: `Bearer ${cfg.apiKey}` };
-
-  // One attempt, plus one retry for 429 (after Retry-After) and 5xx / network errors.
-  for (let attempt = 1; attempt <= 2; attempt++) {
-    const last = attempt === 2;
-    let res: Response;
-    try {
-      res = await fetchImpl(url, { method: 'POST', headers, body, signal: AbortSignal.timeout(cfg.timeoutMs) });
-    } catch (err) {
-      if (!last) {
-        await sleep(1000);
-        continue;
-      }
-      throw new LLMError('AI_UPSTREAM', `gateway unreachable: ${(err as Error).message}`, 502);
-    }
-
-    if (res.status === 401 || res.status === 403) {
-      throw new LLMError('AI_AUTH', 'gateway کلید KONKRED_API_KEY را نپذیرفت.', 502);
-    }
-    if (res.status === 429) {
-      if (!last) {
-        await sleep(retryDelayMs(res));
-        continue;
-      }
-      throw new LLMError('AI_RATE_LIMITED', 'ظرفیت رایگان فعلاً پر است؛ بعداً دوباره تلاش کنید.', 429);
-    }
-    if (res.status >= 500) {
-      if (!last) {
-        await sleep(1000);
-        continue;
-      }
-      throw new LLMError('AI_UPSTREAM', `gateway HTTP ${res.status}`, 502);
-    }
-    if (!res.ok) {
-      throw new LLMError('AI_UPSTREAM', `gateway HTTP ${res.status}`, 502);
-    }
-
-    const data: any = await res.json().catch(() => null);
-    const model = String(data?.model ?? '');
-    if (isMockModel(model)) {
-      throw new LLMError('AI_UNAVAILABLE', 'هیچ provider زنده‌ای در دسترس نیست (پاسخ شبیه‌ساز گیتوی).', 503);
-    }
-    const text = data?.choices?.[0]?.message?.content;
-    if (typeof text !== 'string' || !text.trim()) {
-      throw new LLMError('AI_BAD_RESPONSE', 'gateway پاسخ خالی برگرداند.', 502);
-    }
-
-    const result: LLMResult = { text, model, provider: model.split(':')[0] || 'unknown', cached: false };
-    if (cacheFile) writeCache(cacheFile, result);
-    return result;
-  }
-  throw new LLMError('AI_UPSTREAM', 'unreachable', 502);
-}
-
-/** Parse JSON from model output that may be fenced or have surrounding prose. */
-export function parseJsonLoose<T = any>(text: string): T | null {
-  const t = text.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
-  try {
-    return JSON.parse(t) as T;
-  } catch {
-    // fall through
-  }
-  const start = t.indexOf('{');
-  const end = t.lastIndexOf('}');
-  if (start >= 0 && end > start) {
-    try {
-      return JSON.parse(t.slice(start, end + 1)) as T;
-    } catch {
-      return null;
-    }
-  }
-  return null;
+  return {
+    text: result.text,
+    model: result.meta.model,
+    provider: result.meta.provider,
+    cached: result.meta.cached,
+  };
 }
