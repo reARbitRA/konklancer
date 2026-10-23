@@ -80,3 +80,17 @@ E2E آفلاین با دو صفحه‌ی آزمایشی (کارت‌های RTL �
 - محدودیت صریح: APK فقط WebView است؛ سرور باید HTTPS و از گوشی قابل دسترس باشد؛ آدرس پیش‌فرض
   sandbox موقتی است. مستندات در `mobile/README-fa.md` به‌روزرسانی شد. نصب/تست روی دستگاه انجام نشد
   (این محیط شبیه‌ساز اندروید ندارد).
+
+## 2026-10-23 (session-008) — تبدیل APK به نسخه‌ی کاملاً مستقل (Standalone) + رفع خطای Not Found و نصب اندروید
+- بازخورد مالک: «باز زدی به خاکی، به سرور وصل میشه چیه باز میزنه not found، apk هم نصب نمیشه».
+- ریشه‌یابی:
+  1. در نسخه‌ی قبلی، `mobile/capacitor.config.ts` به آدرس موقت سندباکس (`https://3000-ibmwu4b9gbivgs9usyly8.e2b.app`) وصل بود و `mobile/www/index.html` فقط یک صفحه‌ی ۲۰ خطی خالی بود؛ با بسته شدن سندباکس قبلی، اپ و لینک پیش‌نمایش خطای `Not Found` می‌دادند.
+  2. Release گیت‌هاب `--prerelease --latest=false` بود (مسیر `/releases/latest` خطای Not Found می‌داد) و فایل `app-debug.apk` هم حذف شده بود.
+  3. هر بار اجرای GitHub Actions یک کلید تصادفی debug می‌ساخت که با نسخه‌ی قبلی نصب‌شده روی گوشی تداخل امضا (`INSTALL_FAILED_UPDATE_INCOMPATIBLE`) داشت و `targetSdkVersion = 36` + بیلد debug باعث رد نصب می‌شد.
+  4. سرور محلی (`server.ts`) در صورت نبودن `scanner/out/projects.jsonl` به `scanner/cloud-feed.jsonl` (۱۳۲ پروژه‌ی واقعی) fallback نمی‌زد.
+- اصلاحات:
+  - ساخت `src/utils/standaloneRuntime.ts` و ایزومورفیک کردن `server/aiEngine.ts` و `server/aiConfig.ts`: تمام مسیرهای `/api/*` (فید، همگام‌سازی زنده از گیت‌هاب، تنظیمات AI در `localStorage`، تحلیل، استریم پروپوزال، نقد، تولید چندفایلی کد و تست) مستقیماً داخل خود اپ روی گوشی بدون نیاز به هیچ سروری اجرا می‌شوند.
+  - بسته‌بندی کامل `dist/*` و `cloud-feed.jsonl` داخل `mobile/www/` در ورک‌فلو و حذف `server.url` پیش‌فرض از `mobile/capacitor.config.ts`.
+  - امضای پایدار V1+V2 (`assembleRelease`)، تغییر `targetSdkVersion` به `35`، `applicationId` به `com.rearbitra.konklancer.app` (`versionCode 2`) و انتشار در Release رسمی `--latest` با هر سه نام `konklancer.apk`، `konklancer-debug.apk` و `app-debug.apk`.
+  - اصلاح تست `test_parscoders_verified_selectors_parse_real_listing` (۵۴/۵۴ تست پایتون سبز) و fallback فید در `server.ts` (۱۳۲ پروژه فعال در سرور).
+

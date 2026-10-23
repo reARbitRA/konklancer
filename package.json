@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "tsx server.ts",
+    "prebuild": "mkdir -p public && cp -f scanner/cloud-feed.jsonl public/cloud-feed.jsonl && cp -f scanner/cloud-status.json public/cloud-status.json",
     "build": "vite build",
     "preview": "vite preview",
     "start": "tsx server.ts",

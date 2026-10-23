@@ -261,7 +261,13 @@ function emitBridgeLog(message: string, type: 'scan' | 'bid' | 'code' | 'github'
 
 /** فید فعلی را از خروجی JSONL اسکنر می‌سازد (بدون هیچ تماس شبکه‌ای). */
 function loadFeedJobs() {
-  const projects = readProjects(SCAN_CONFIG.outFile);
+  let projects = readProjects(SCAN_CONFIG.outFile);
+  if (projects.length === 0) {
+    const cloudFallback = path.join(SCAN_CONFIG.cwd, 'scanner', 'cloud-feed.jsonl');
+    if (cloudFallback !== SCAN_CONFIG.outFile) {
+      projects = readProjects(cloudFallback);
+    }
+  }
   const feed = buildFeed(projects, {
     include: SCAN_CONFIG.include,
     exclude: SCAN_CONFIG.exclude,
@@ -1068,8 +1074,7 @@ async function startServer() {
         middlewareMode: true,
         hmr: false,
         watch: null,
-        // Allow the sandbox live-preview host (*.e2b.app) and localhost only.
-        allowedHosts: ['.e2b.app', 'localhost', '127.0.0.1'],
+        allowedHosts: true,
       },
       appType: 'spa',
     });

@@ -11,9 +11,21 @@
  *
  * هیچ کلید یا متن promptی لاگ نمی‌شود.
  */
-import { createHash } from 'crypto';
-import fs from 'fs';
-import path from 'path';
+const getBuiltin = <T = any>(name: string): T | null => {
+  try {
+    const proc = (globalThis as any).process;
+    if (proc && typeof proc.getBuiltinModule === 'function') {
+      return proc.getBuiltinModule(name) as T;
+    }
+  } catch {
+    /* محیط مرورگر / وب‌ویو */
+  }
+  return null;
+};
+
+const nodeCrypto = getBuiltin<typeof import('crypto')>('crypto');
+const nodeFs = getBuiltin<typeof import('fs')>('fs');
+const nodePath = getBuiltin<typeof import('path')>('path');
 import { pickModels } from '../shared/aiProviders';
 
 export type TaskType = 'general' | 'extraction' | 'summarization' | 'code-generation' | 'proposal';
@@ -113,7 +125,19 @@ export interface ChatResult {
 export type DeltaHandler = (delta: string, info: { model: string }) => void;
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-const sha256 = (value: string) => createHash('sha256').update(value).digest('hex');
+const sha256 = (value: string): string => {
+  if (nodeCrypto) return nodeCrypto.createHash('sha256').update(value).digest('hex');
+  let h1 = 0xdeadbeef ^ value.length;
+  let h2 = 0x41c6ce57 ^ value.length;
+  for (let i = 0; i < value.length; i++) {
+    const ch = value.charCodeAt(i);
+    h1 = Math.imul(h1 ^ ch, 2654435761);
+    h2 = Math.imul(h2 ^ ch, 1597334677);
+  }
+  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+  h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+  return (h2 >>> 0).toString(16).padStart(8, '0') + (h1 >>> 0).toString(16).padStart(8, '0');
+};
 
 export const isMockModel = (model: string) => model.trim().toLowerCase().startsWith('mock');
 
@@ -141,7 +165,11 @@ function retryDelayMs(res: Response): number {
 }
 
 function cacheFileFor(target: ChatTarget, cacheKey: string, model: string): string {
-  return path.join(target.cacheDir, `${sha256(`${target.id}|${model}|${cacheKey}`)}.json`);
+  const hash = sha256(`${target.id}|${model}|${cacheKey}`);
+  if (nodePath && target.cacheDir) {
+    return nodePath.join(target.cacheDir, `${hash}.json`);
+  }
+  return `konklancer_llm_cache_${hash}`;
 }
 
 interface CacheEntry {
@@ -149,22 +177,38 @@ interface CacheEntry {
   model: string;
   provider: string;
   createdAt: string;
+  storedAtMs?: number;
 }
 
+const browserCache = new Map<string, CacheEntry>();
+
 function readCache(file: string, ttlMs: number): CacheEntry | null {
+  if (!nodeFs) {
+    const mem = browserCache.get(file);
+    if (!mem) return null;
+    if (Date.now() - (mem.storedAtMs ?? 0) > ttlMs) {
+      browserCache.delete(file);
+      return null;
+    }
+    return mem;
+  }
   try {
-    const stat = fs.statSync(file);
+    const stat = nodeFs.statSync(file);
     if (Date.now() - stat.mtimeMs > ttlMs) return null;
-    return JSON.parse(fs.readFileSync(file, 'utf8')) as CacheEntry;
+    return JSON.parse(nodeFs.readFileSync(file, 'utf8')) as CacheEntry;
   } catch {
     return null;
   }
 }
 
 function writeCache(file: string, value: CacheEntry) {
+  if (!nodeFs || !nodePath) {
+    browserCache.set(file, { ...value, storedAtMs: Date.now() });
+    return;
+  }
   try {
-    fs.mkdirSync(path.dirname(file), { recursive: true });
-    fs.writeFileSync(file, JSON.stringify(value), { mode: 0o600 });
+    nodeFs.mkdirSync(nodePath.dirname(file), { recursive: true });
+    nodeFs.writeFileSync(file, JSON.stringify(value), { mode: 0o600 });
   } catch (error) {
     console.warn('[ai] cache write failed:', (error as Error).message);
   }
@@ -813,5 +857,8 @@ export const DEFAULT_TIMEOUT_MS = 120_000;
 export const DEFAULT_CACHE_TTL_MS_EXPORT = DEFAULT_CACHE_TTL_MS;
 
 export function tempCacheDir(): string {
-  return path.join(process.cwd(), 'data', 'cache', 'llm');
+  if (nodePath && typeof process !== 'undefined' && typeof process.cwd === 'function') {
+    return nodePath.join(process.cwd(), 'data', 'cache', 'llm');
+  }
+  return 'browser-cache';
 }

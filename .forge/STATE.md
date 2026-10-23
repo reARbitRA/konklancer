@@ -21,11 +21,10 @@
 4. T-004 R7: اعلان اختیاری تلگرام برای پروژه‌های بالای آستانه.
 5. T-005: SQLite + `POST /api/bids` + `GET /api/stats` (مبنای قیمت‌گذاری مبتنی بر نتیجه).
 6. کالیبراسیون انتخابگر یک پلتفرم واقعی و ثبت آن در platforms.json.
-## Android APK
-- بیلد خودکار روی push شاخه‌ی `arena/5c65e810-konklancer` (فایل‌های `mobile/**` یا خود workflow).
-- خروجی: prerelease چرخشی `apk-latest` → `konklancer-debug.apk` + artifact هر اجرا.
-- آدرس سرور: `server_url` ورودی → `vars.KONKLANCER_SERVER_URL` → پیش‌فرض (آدرس موقت sandbox).
-- APK فقط WebView است (بدون سرور/اسکنر روی گوشی)؛ جزئیات در `mobile/README-fa.md`.
+## Android APK (Standalone v2.0)
+- **کاملاً مستقل (Standalone):** کل باندل وب (`dist/*` شامل رابط کاربری، موتور AI ایزومورفیک و ۱۳۲ پروژه‌ی واقعی `cloud-feed.jsonl`) داخل `mobile/www/` و APK بسته‌بندی می‌شود (`src/utils/standaloneRuntime.ts`).
+- **بدون وابستگی به سرور خارجی:** `mobile/capacitor.config.ts` دیگر به آدرس موقت e2b وصل نمی‌شود و اپ از داخل خود گوشی (`https://localhost`) اجرا می‌شود و هرگز خطای Not Found نمی‌دهد.
+- **امضای ثابت و سازگاری نصب:** با کلید PKCS12 پایدار (`v1SigningEnabled` + `v2SigningEnabled`)، `targetSdkVersion = 35` و شناسه پکیج `com.rearbitra.konklancer.app` (`versionCode 2`) بیلد Release امضاشده تولید و در Release `apk-latest` (`--latest`) با هر سه نام `konklancer.apk`, `konklancer-debug.apk`, `app-debug.apk` منتشر می‌شود.
 
 ## Known issues
 - `npm install` به `--legacy-peer-deps` نیاز دارد؛ `vite.config.ts` از `__dirname` استفاده می‌کند (هشدار Vite).

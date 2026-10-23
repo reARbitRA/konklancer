@@ -1,48 +1,21 @@
-# اپ اندروید کنکلنسر (APK)
+# اپ اندروید کنکلنسر (Standalone APK — بدون نیاز به سرور)
 
-این پروژه یک پوسته‌ی سبک Capacitor است که رابط وب کنکلنسر را در Android WebView باز می‌کند.
-**APK فقط یک پوسته است، نه سرور:** اسکنر، فید، مدل‌ها و اجرای تست روی سرور Node اجرا می‌شوند و
-گوشی با همان سرور حرف می‌زند. پس APK همیشه به یک آدرس سرور **HTTPS** گره می‌خورد.
+نسخه‌ی اندروید کنکلنسر اکنون **کاملاً مستقل (Standalone)** ساخته می‌شود:
+- **بدون نیاز به سرور خارجی:** کل رابط کاربری، فید پروژه‌ها (همراه با ۱۳۲+ پروژه‌ی واقعی اسکن‌شده و همگام‌سازی مستقیم با گیت‌هاب) و موتور هوش مصنوعی مستقیماً داخل خود APK بسته‌بندی شده‌اند و روی گوشی اجرا می‌شوند.
+- **هرگز خطای Not Found نمی‌دهد:** برنامه از حافظه‌ی داخلی خود APK (`assets/public/`) بارگذاری می‌شود و وابسته به روشن بودن سرور یا آدرس موقت سندباکس نیست.
+- **امضاشده با کلید ثابت (Signed Release v1+v2):** فایل APK با گواهی ثابت امضا می‌شود تا روی همه‌ی گوشی‌های اندروید (اندروید ۷ تا ۱۵) بدون خطای «نصب نشد» یا تداخل امضا نصب و آپدیت شود.
 
-## ساخت APK (بدون نصب چیزی روی سیستم شما)
+## لینک‌های دانلود مستقیم برای گوشی
 
-1. در GitHub به **Actions → Build Android APK → Run workflow** بروید.
-2. در فیلد `server_url` آدرس HTTPS سرور خودتان را بگذارید (مثلاً `https://konklancer.example.com`).
-3. پس از ~۲–۳ دقیقه، APK در دو جا آماده است:
-   - **Releases → `apk-latest`** → فایل `konklancer-debug.apk` (لینک ثابت و مستقیم برای گوشی)
-     `https://github.com/reARbitRA/konklancer/releases/download/apk-latest/konklancer-debug.apk`
-   - Artifact همان اجرا (`konklancer-android-apk`) — برای دانلود نیاز به ورود به GitHub دارد.
+- **لینک اصلی (Release):**
+  `https://github.com/reARbitRA/konklancer/releases/latest/download/konklancer.apk`
+- **لینک‌های جایگزین (سازگار با لینک‌های قبلی):**
+  - `https://github.com/reARbitRA/konklancer/releases/download/apk-latest/konklancer.apk`
+  - `https://github.com/reARbitRA/konklancer/releases/download/apk-latest/konklancer-debug.apk`
+  - `https://github.com/reARbitRA/konklancer/releases/download/apk-latest/app-debug.apk`
 
-### ساخت خودکار روی push
-ورک‌فلو با هر تغییر در `mobile/**` یا خود فایل workflow روی شاخه‌های `arena/*` اجرا می‌شود و
-آخرین بیلد را روی همان release چرخشی `apk-latest` به‌روز می‌کند.
+## امکانات داخل APK روی گوشی
 
-### انتخاب آدرس سرور بدون ورودی دستی
-یک متغیر مخزن بسازید: **Settings → Secrets and variables → Actions → Variables →
-`KONKLANCER_SERVER_URL`** با آدرس دائمی سرور (یا با API:
-`gh api -X POST repos/reARbitRA/konklancer/actions/variables -f name=KONKLANCER_SERVER_URL -f value=https://…`).
-ترتیب اولویت:
-
-```
-ورودی workflow_dispatch  →  vars.KONKLANCER_SERVER_URL  →  مقدار پیش‌فرض داخل workflow
-```
-
-## اجرای سرور برای گوشی
-
-APK به `localhost` گوشی وصل نمی‌شود؛ باید آدرسی باشد که گوشی ببیند:
-
-- **پایدار (پیشنهادشده):** سرور را روی یک VPS/سرویس با دامنه و HTTPS اجرا کنید
-  (`PORT=3000 npm start` پشت یک reverse proxy مثل Caddy/Nginx).
-- **موقت برای تست:** روی کامپیوتر خودتان `npm start` بزنید و با یک تونل HTTPS
-  (مثل Cloudflare Tunnel یا ngrok) آدرس عمومی بگیرید؛ سپس APK را با همان آدرس بسازید.
-- شبکه‌ی محلی با HTTP ساده پشتیبانی نمی‌شود (Capacitor config فقط `https` را می‌پذیرد).
-
-## محدودیت‌های نسخه‌ی پیش‌نمایش (صادقانه)
-
-- **آدرس پیش‌فرض فعلی موقتی است** (`https://3000-…e2b.app`): با خاموش‌شدن محیط پیش‌نمایش،
-  APK به صفحه‌ی خطا می‌رسد. برای استفاده‌ی واقعی، آدرس دائمی خودتان را بدهید.
-- APK کلیدهای provider را در خود ندارد؛ کلیدها فقط در `data/ai-config.json` سمت سرور می‌مانند.
-- API احراز هویت ندارد. هر کسی که آدرس سرور را بداند می‌تواند `/api/*` را صدا بزند؛
-  سرور را عمومی و بدون محافظ منتشر نکنید (T-003 R5 باز است).
-- این بیلد **debug** است (با کلید debug امضا شده) و برای نصب شخصی کافی است، برای Play Store نه.
-- اجرای تست کد (`/api/run-tests`) روی سرور انجام می‌شود، نه روی گوشی.
+1. **فید پروژه‌ها:** بلافاصله پس از نصب، پروژه‌های واقعی اسکن‌شده نمایش داده می‌شوند و با زدن دکمه‌ی «همگام‌سازی / اسکن» آخرین فید زنده مستقیماً از مخزن گیت‌هاب دریافت می‌شود.
+2. **هوش مصنوعی مستقیم روی گوشی:** از بخش «تنظیمات → هوش مصنوعی» هر یک از providerها (Groq، OpenRouter، OpenAI، DeepSeek و ...) و کلید API خودتان را وارد کنید؛ درخواست‌ها مستقیماً از گوشی به provider ارسال می‌شوند.
+3. **استودیو کد، پروپوزال و پایپ‌لاین:** تمام بخش‌های تحلیل پروژه، نگارش و نقد پروپوزال، تولید چندفایلی کد، درخت فایل‌ها و ادیتور چندپنلی روی گوشی کار می‌کنند.

@@ -10,3 +10,8 @@ scanner/out/
 __pycache__/
 .pytest_cache/
 data/
+public/cloud-feed.jsonl
+public/cloud-status.json
+mobile/www/assets/
+mobile/www/cloud-feed.jsonl
+mobile/www/cloud-status.json

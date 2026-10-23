@@ -3,31 +3,36 @@ name: Build Android APK
 on:
   push:
     branches:
-      - arena/bb8cb4b4-konklancer
-      - arena/5c65e810-konklancer
+      - main
+      - 'arena/**'
     paths:
+      - 'src/**'
+      - 'server/**'
+      - 'shared/**'
+      - 'scanner/cloud-feed.jsonl'
       - 'mobile/**'
+      - 'package.json'
+      - 'index.html'
       - '.github/workflows/build-android-apk.yml'
   workflow_dispatch:
     inputs:
       server_url:
-        description: HTTPS address of the personal Konklancer server
-        required: true
+        description: Optional custom HTTPS server URL (leave empty for standalone on-device APK)
+        required: false
         type: string
-        default: 'https://3000-ibmwu4b9gbivgs9usyly8.e2b.app'
+        default: ''
 
 permissions:
   contents: write
 
 jobs:
   build-apk:
-    name: Build installable debug APK
+    name: Build standalone signed APK
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
-      # اولویت: ورودی workflow_dispatch → متغیر مخزن (vars.KONKLANCER_SERVER_URL) → پیش‌فرض فعلی.
-      # برای نصب پایدار روی گوشی، متغیر مخزن را روی آدرس دائمی سرور خودتان بگذارید.
-      CAPACITOR_SERVER_URL: ${{ github.event.inputs.server_url || vars.KONKLANCER_SERVER_URL || 'https://3000-ibmwu4b9gbivgs9usyly8.e2b.app' }}
+      # پیش‌فرض خالی است تا APK کاملاً مستقل (Standalone) ساخته شود و همه چیز از داخل خود گوشی اجرا شود.
+      CAPACITOR_SERVER_URL: ${{ github.event.inputs.server_url || vars.KONKLANCER_SERVER_URL || '' }}
     steps:
       - name: Check out source
         uses: actions/checkout@v5
@@ -43,16 +48,22 @@ jobs:
         with:
           node-version: '22'
 
-      - name: Validate server URL
-        working-directory: mobile
+      - name: Build Konklancer web bundle and embed into mobile/www
         run: |
-          node --input-type=module -e "const url = new URL(process.env.CAPACITOR_SERVER_URL); if (url.protocol !== 'https:') throw new Error('HTTPS is required'); console.log('Android app will open:', url.origin);"
+          npm install --legacy-peer-deps --no-audit --no-fund
+          npm run build
+          rm -rf mobile/www
+          mkdir -p mobile/www
+          cp -R dist/* mobile/www/
+          ls -lh mobile/www/ mobile/www/assets/
+          test -f mobile/www/index.html
+          test -f mobile/www/cloud-feed.jsonl
 
       - name: Install Capacitor dependencies
         working-directory: mobile
         run: npm ci --no-audit --no-fund
 
-      - name: Sync app configuration
+      - name: Sync app configuration and web assets into Android project
         working-directory: mobile
         run: |
           set +e
@@ -60,70 +71,99 @@ jobs:
           status=${PIPESTATUS[0]}
           set -e
           if [ "$status" -ne 0 ]; then
-            python3 - "$RUNNER_TEMP/konklancer-cap-sync.log" <<'PY'
-          from pathlib import Path
-          import sys
-          lines = Path(sys.argv[1]).read_text(errors='replace').splitlines()[-20:]
-          message = ' | '.join(line.strip() for line in lines if line.strip())
-          message = message.replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')
-          print(f'::error title=Capacitor sync failed::{message}')
-          PY
+            cat "$RUNNER_TEMP/konklancer-cap-sync.log"
             exit "$status"
           fi
+          cat android/app/src/main/assets/capacitor.config.json
+          ls -lh android/app/src/main/assets/public/
 
-      - name: Build APK
+      - name: Prepare persistent signing keystore
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          keystore="$RUNNER_TEMP/konklancer-signing.p12"
+          if gh release download apk-latest --pattern "konklancer-signing.p12" --dir "$RUNNER_TEMP" --clobber 2>/dev/null && [ -s "$keystore" ]; then
+            echo "Reusing existing signing keystore from apk-latest release."
+          else
+            echo "Generating new persistent PKCS12 signing keystore..."
+            rm -f "$keystore"
+            keytool -genkeypair -v \
+              -storetype PKCS12 \
+              -keystore "$keystore" \
+              -alias konklancer \
+              -keyalg RSA \
+              -keysize 2048 \
+              -validity 10000 \
+              -storepass konklancer2026 \
+              -keypass konklancer2026 \
+              -dname "CN=Konklancer, OU=Mobile, O=Konklancer, L=Tehran, S=Tehran, C=IR"
+          fi
+          ls -lh "$keystore"
+
+      - name: Build signed Release and Debug APKs
         working-directory: mobile/android
+        env:
+          KONKLANCER_KEYSTORE_PATH: ${{ runner.temp }}/konklancer-signing.p12
         run: |
           set +e
-          ./gradlew --no-daemon assembleDebug 2>&1 | tee "$RUNNER_TEMP/konklancer-gradle.log"
+          ./gradlew --no-daemon assembleRelease assembleDebug 2>&1 | tee "$RUNNER_TEMP/konklancer-gradle.log"
           status=${PIPESTATUS[0]}
           set -e
           if [ "$status" -ne 0 ]; then
-            python3 - "$RUNNER_TEMP/konklancer-gradle.log" <<'PY'
-          from pathlib import Path
-          import sys
-          lines = Path(sys.argv[1]).read_text(errors='replace').splitlines()[-25:]
-          message = ' | '.join(line.strip() for line in lines if line.strip())
-          message = message.replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')
-          print(f'::error title=Gradle build failed::{message}')
-          PY
+            tail -n 40 "$RUNNER_TEMP/konklancer-gradle.log"
             exit "$status"
           fi
 
-      - name: Give the APK a friendly name
+      - name: Verify and package APK files
         run: |
-          cp mobile/android/app/build/outputs/apk/debug/app-debug.apk "$RUNNER_TEMP/konklancer-debug.apk"
-          ls -lh "$RUNNER_TEMP/konklancer-debug.apk"
+          release_apk="mobile/android/app/build/outputs/apk/release/app-release.apk"
+          debug_apk="mobile/android/app/build/outputs/apk/debug/app-debug.apk"
+          if [ -f "$release_apk" ]; then
+            primary_apk="$release_apk"
+          else
+            primary_apk="$debug_apk"
+          fi
+          jarsigner -verify "$primary_apk"
+          cp "$primary_apk" "$RUNNER_TEMP/konklancer.apk"
+          cp "$primary_apk" "$RUNNER_TEMP/konklancer-debug.apk"
+          cp "$primary_apk" "$RUNNER_TEMP/app-debug.apk"
+          ls -lh "$RUNNER_TEMP/konklancer.apk" "$RUNNER_TEMP/konklancer-debug.apk" "$RUNNER_TEMP/app-debug.apk"
 
-      - name: Upload APK
+      - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: konklancer-android-apk
-          path: ${{ runner.temp }}/konklancer-debug.apk
+          path: |
+            ${{ runner.temp }}/konklancer.apk
+            ${{ runner.temp }}/konklancer-debug.apk
           if-no-files-found: error
-          retention-days: 7
+          retention-days: 14
 
-      # انتشار APK در یک prerelease چرخشی تا لینک دانلود پایدار و مستقیم روی گوشی باز شود.
-      - name: Publish installable APK to the rolling prerelease
+      - name: Publish standalone installable APK to GitHub Release (latest)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          SERVER_URL: ${{ env.CAPACITOR_SERVER_URL }}
         run: |
           set -euo pipefail
           tag="apk-latest"
-          apk="$RUNNER_TEMP/konklancer-debug.apk"
-          notes=$(cat <<EOF
-          APK پیش‌نمایش Konklancer (debug، قابل نصب).
+          notes=$(cat <<'EOF'
+          ### نسخه‌ی مستقل اندروید Konklancer (Standalone APK — بدون نیاز به سرور)
 
-          این بیلد به سرور زیر وصل می‌شود: ${SERVER_URL}
+          - **کاملاً مستقل (Standalone):** تمام رابط کاربری، فید پروژه‌ها (۱۳۲+ پروژه‌ی واقعی اسکن‌شده + همگام‌سازی زنده با گیت‌هاب) و موتور هوش مصنوعی مستقیماً داخل خود APK روی گوشی اجرا می‌شوند و **به هیچ سرور خارجی نیاز ندارند**.
+          - **امضاشده (Signed Release v1+v2):** قابل نصب مستقیم روی همه‌ی گوشی‌های اندروید (اندروید ۷ تا ۱۵).
 
-          اگر آدرس سرور عوض شد، این ورک‌فلو را با ورودی server_url دوباره اجرا کنید
-          (یا متغیر مخزن KONKLANCER_SERVER_URL را به آدرس دائمی خودتان تغییر دهید).
+          #### لینک دانلود مستقیم برای گوشی:
+          - [`konklancer.apk`](https://github.com/reARbitRA/konklancer/releases/latest/download/konklancer.apk)
+          - [`konklancer-debug.apk`](https://github.com/reARbitRA/konklancer/releases/download/apk-latest/konklancer-debug.apk)
           EOF
           )
           if gh release view "$tag" >/dev/null 2>&1; then
-            gh release edit "$tag" --notes "$notes" --prerelease
+            gh release edit "$tag" --title "Konklancer Android APK (Standalone v2.0)" --notes "$notes" --prerelease=false --latest
           else
-            gh release create "$tag" --title "Konklancer APK — آخرین بیلد" --notes "$notes" --prerelease --latest=false
+            gh release create "$tag" --title "Konklancer Android APK (Standalone v2.0)" --notes "$notes" --prerelease=false --latest
           fi
-          gh release upload "$tag" "$apk" --clobber
+          gh release upload "$tag" \
+            "$RUNNER_TEMP/konklancer.apk" \
+            "$RUNNER_TEMP/konklancer-debug.apk" \
+            "$RUNNER_TEMP/app-debug.apk" \
+            "$RUNNER_TEMP/konklancer-signing.p12" \
+            --clobber

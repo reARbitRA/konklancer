@@ -30,6 +30,7 @@ import { categorizeJobWithGemini } from './utils/geminiCategorizer';
 import { categoryLabel, detectCategory } from '../shared/taxonomy';
 import { FeedStatusBar, FeedSource } from './components/FeedStatusBar';
 import { getAIStatus, type AIStatusPayload } from './utils/aiClient';
+import { isCapacitorNative, isStandaloneMode } from './utils/standaloneRuntime';
 
 /**
  * Runtime Type Guard to strictly validate incoming Socket.io data
@@ -439,6 +440,14 @@ export default function App() {
 
   // Robust Socket.io Client Setup with Exponential Backoff Reconnection Policy
   useEffect(() => {
+    if (isCapacitorNative() || isStandaloneMode()) {
+      setSocketConnected(true);
+      setSocketError(null);
+      setIsReconnecting(false);
+      addLog('حالت مستقل (Standalone) فعال است؛ فید و هوش مصنوعی مستقیماً روی دستگاه اجرا می‌شوند.', 'scan');
+      return;
+    }
+
     const socket: Socket = io({
       transports: ['websocket', 'polling'],
       reconnection: true,
@@ -457,6 +466,13 @@ export default function App() {
     });
 
     socket.on('disconnect', (reason) => {
+      if (isStandaloneMode()) {
+        setSocketConnected(true);
+        setSocketError(null);
+        setIsReconnecting(false);
+        socket.disconnect();
+        return;
+      }
       setSocketConnected(false);
       if (reason === 'io server disconnect') {
         // The server forcefully disconnected; reconnect manually
@@ -467,6 +483,13 @@ export default function App() {
 
     // Persistent Error & Connect Error Handlers
     socket.on('connect_error', (err) => {
+      if (isStandaloneMode()) {
+        setSocketConnected(true);
+        setSocketError(null);
+        setIsReconnecting(false);
+        socket.disconnect();
+        return;
+      }
       setSocketConnected(false);
       setIsReconnecting(true);
       const errMsg = `خطای اتصال به بریج وب‌سوکت: ${err.message || 'شبکه در دسترس نیست'}.`;
