@@ -19,7 +19,9 @@
 
 ### انتخاب آدرس سرور بدون ورودی دستی
 یک متغیر مخزن بسازید: **Settings → Secrets and variables → Actions → Variables →
-`KONKLANCER_SERVER_URL`** با آدرس دائمی سرور. ترتیب اولویت:
+`KONKLANCER_SERVER_URL`** با آدرس دائمی سرور (یا با API:
+`gh api -X POST repos/reARbitRA/konklancer/actions/variables -f name=KONKLANCER_SERVER_URL -f value=https://…`).
+ترتیب اولویت:
 
 ```
 ورودی workflow_dispatch  →  vars.KONKLANCER_SERVER_URL  →  مقدار پیش‌فرض داخل workflow

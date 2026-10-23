@@ -90,11 +90,16 @@ jobs:
             exit "$status"
           fi
 
+      - name: Give the APK a friendly name
+        run: |
+          cp mobile/android/app/build/outputs/apk/debug/app-debug.apk "$RUNNER_TEMP/konklancer-debug.apk"
+          ls -lh "$RUNNER_TEMP/konklancer-debug.apk"
+
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: konklancer-android-apk
-          path: mobile/android/app/build/outputs/apk/debug/app-debug.apk
+          path: ${{ runner.temp }}/konklancer-debug.apk
           if-no-files-found: error
           retention-days: 7
 
@@ -106,7 +111,7 @@ jobs:
         run: |
           set -euo pipefail
           tag="apk-latest"
-          apk="mobile/android/app/build/outputs/apk/debug/app-debug.apk"
+          apk="$RUNNER_TEMP/konklancer-debug.apk"
           notes=$(cat <<EOF
           APK پیش‌نمایش Konklancer (debug، قابل نصب).
 
@@ -121,4 +126,4 @@ jobs:
           else
             gh release create "$tag" --title "Konklancer APK — آخرین بیلد" --notes "$notes" --prerelease --latest=false
           fi
-          gh release upload "$tag" "$apk#konklancer-debug.apk" --clobber
+          gh release upload "$tag" "$apk" --clobber
